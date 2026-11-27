@@ -3,6 +3,7 @@ import { peekVault, VaultError, type VaultData } from "@inkvault/core";
 import { importVaultFile, loadStoredVault, saveNewVault, unlockVault, type StoredVault } from "./vaultStore";
 import { supportsFileAccess } from "./fileVault";
 import { isTauri } from "./desktop";
+import { OwlMascot } from "./mascots";
 
 function canOpenFile(): boolean {
   return supportsFileAccess() || isTauri();
@@ -135,7 +136,8 @@ function UnlockForm({
 
   return (
     <main className="screen">
-      <h1>Unlock vault</h1>
+      <div className="brand"><OwlMascot size={44} /><h1>inkvault</h1></div>
+      <h2>Unlock vault</h2>
       {needsKeyfile && <p className="muted">This vault requires a keyfile.</p>}
       <form
         onSubmit={(e) => {
@@ -197,7 +199,8 @@ function CreateForm({
 
   return (
     <main className="screen">
-      <h1>Create a vault</h1>
+      <div className="brand"><OwlMascot size={44} /><h1>inkvault</h1></div>
+      <h2>Create a vault</h2>
       <p className="muted">
         Everything is encrypted on this device before it is stored. The server never sees your work.
       </p>

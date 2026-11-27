@@ -33,7 +33,7 @@ export interface ChainDef {
   steps: string[];
 }
 
-export type ThemeName = "dark" | "light" | "high-contrast";
+export type ThemeName = "lofi" | "synthwave" | "dark" | "light" | "high-contrast";
 export type FontName = "default" | "dyslexic";
 
 export interface CachedModel {
@@ -89,7 +89,7 @@ export function defaultSettings(): Settings {
     models: [],
     promptLibrary: [],
     chains: [],
-    theme: "dark",
+    theme: "lofi",
     font: "default",
     autoLorebook: true,
   };

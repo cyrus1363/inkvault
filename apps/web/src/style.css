@@ -9,6 +9,89 @@
   --error: #f7768e;
 }
 
+[data-theme="lofi"] {
+  color-scheme: light;
+  --bg: #f2e9d8;
+  --panel: #faf3e3;
+  --border: #d9c9a5;
+  --fg: #3a3128;
+  --muted: #8a7a5f;
+  --accent: #a86432;
+  --error: #b3402e;
+}
+
+[data-theme="lofi"] body {
+  background-image: radial-gradient(rgba(122, 92, 51, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+[data-theme="lofi"] input,
+[data-theme="lofi"] select,
+[data-theme="lofi"] textarea,
+[data-theme="lofi"] .output,
+[data-theme="lofi"] .modal-body pre,
+[data-theme="lofi"] .selection-preview {
+  background: #fffaf0;
+}
+
+[data-theme="lofi"] .binder-list li.active {
+  background: #ecdfc4;
+}
+
+[data-theme="lofi"] .doc-body {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+[data-theme="synthwave"] {
+  color-scheme: dark;
+  --bg: #0d0221;
+  --panel: #170736;
+  --border: #3d1a66;
+  --fg: #ece4ff;
+  --muted: #b388ff;
+  --accent: #00f0ff;
+  --error: #ff2e88;
+}
+
+[data-theme="synthwave"] body {
+  background:
+    linear-gradient(180deg, rgba(13, 2, 33, 0) 55%, rgba(255, 46, 136, 0.12) 100%),
+    linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+    #0d0221;
+  background-size: auto, 44px 44px, 44px 44px, auto;
+}
+
+[data-theme="synthwave"] input,
+[data-theme="synthwave"] select,
+[data-theme="synthwave"] textarea,
+[data-theme="synthwave"] .output,
+[data-theme="synthwave"] .modal-body pre,
+[data-theme="synthwave"] .selection-preview {
+  background: #100429;
+  border-color: #3d1a66;
+}
+
+[data-theme="synthwave"] .binder-list li.active {
+  background: #2a0f52;
+}
+
+[data-theme="synthwave"] button {
+  background: linear-gradient(90deg, #ff2e88, #7b2ff7);
+  color: #fff;
+  text-shadow: 0 0 6px rgba(255, 46, 136, 0.8);
+}
+
+[data-theme="synthwave"] .take-tab.active {
+  background: #00f0ff;
+  color: #0d0221;
+  text-shadow: none;
+}
+
+[data-theme="synthwave"] .doc-body {
+  font-family: "Courier New", ui-monospace, monospace;
+}
+
 [data-theme="light"] {
   color-scheme: light;
   --bg: #f6f5f0;
@@ -656,4 +739,22 @@ button:disabled {
   padding: 0.2rem 0.45rem;
   font-size: 0.7rem;
   font-weight: 400;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.brand h1 {
+  margin: 0;
+}
+
+.theme-quick {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  background: var(--panel);
 }

@@ -163,6 +163,8 @@ export default function SettingsModal({
       <label>
         Theme
         <select value={theme} onChange={(e) => setTheme(e.target.value as ThemeName)}>
+          <option value="lofi">lofi (owl mascot)</option>
+          <option value="synthwave">synthwave (cat mascot)</option>
           <option value="dark">Dark</option>
           <option value="light">Light</option>
           <option value="high-contrast">High contrast</option>

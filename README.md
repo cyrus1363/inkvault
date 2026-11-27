@@ -50,10 +50,13 @@ are pinned in the versioned header so the format can be upgraded later.
   vault-file IO, native file picker, and a llama-server sidecar; local provider
   in core (OpenAI-compatible `http://127.0.0.1:*` endpoints — llama.cpp / Ollama),
   provider switch in the UI. Web app detects Tauri and uses native commands.
-- **Phase 4 (in progress):** CI (GitHub Actions: npm ci + test + build),
+- **Phase 4 (done):** CI (GitHub Actions: npm ci + test + build),
   accessibility (dark/light/high-contrast themes, OpenDyslexic), pomodoro
   sprint timer, auto-lorebook injection (alias scan of the active scene, with
   excludable chips), kit-bash tabs (parallel takes), prompt chains.
+- **Phase 5 (in progress):** branding — `lofi` theme with owl mascot (default)
+  and `synthwave` theme with cat mascot, quick-switch in the header, mascots on
+  the auth screens; RaptorWrite 1.0 UI/UX is the baseline to beat.
 
 ## Commands
 

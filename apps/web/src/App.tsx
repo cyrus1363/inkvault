@@ -22,6 +22,8 @@ import {
 } from "./vaultStore";
 import { attachVaultFile, supportsFileAccess } from "./fileVault";
 import { isTauri } from "./desktop";
+import { Mascot } from "./mascots";
+import type { ThemeName } from "@inkvault/core";
 import { download } from "./download";
 import { AuthScreen } from "./AuthScreens";
 import Binder from "./Binder";
@@ -71,7 +73,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = data?.settings.theme ?? "dark";
+    document.documentElement.dataset.theme = data?.settings.theme ?? "lofi";
     document.body.classList.toggle("font-dyslexic", data?.settings.font === "dyslexic");
   }, [data?.settings.theme, data?.settings.font]);
 
@@ -165,7 +167,20 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
+        <Mascot theme={data.settings.theme} size={26} />
         <strong>{stored.name}</strong>
+        <select
+          className="theme-quick"
+          value={data.settings.theme}
+          title="Theme"
+          onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, theme: e.target.value as ThemeName } }))}
+        >
+          <option value="lofi">lofi 🦉</option>
+          <option value="synthwave">synthwave 🐱</option>
+          <option value="dark">dark</option>
+          <option value="light">light</option>
+          <option value="high-contrast">high contrast</option>
+        </select>
         <span className="muted small">{saveError ?? "autosaves locally, encrypted"}</span>
         <span className="spacer" />
         <details className="menu">
