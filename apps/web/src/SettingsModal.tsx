@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createId, type ChainDef, type CuratedList, type DocNode, type FontName, type ModelCollection, type PromptEntry, type ProviderKind, type Settings, type ThemeName } from "@inkvault/core";
 import { getDesktopConfig, isTauri, localServerRunning, setDesktopConfig, startLocalServer, stopLocalServer, type DesktopConfig } from "./desktop";
 import Modal from "./Modal";
+import DataHelpSection from "./DataHelp";
 
 const SLOTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
@@ -324,6 +325,7 @@ export default function SettingsModal({
           );
         })}
       </fieldset>
+      <DataHelpSection />
       <div className="panel-row">
         <button
           onClick={() => {
