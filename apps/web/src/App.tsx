@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   addDoc,
   deleteDoc,
+  duplicateDoc,
   exportDocx,
   exportMarkdown,
   exportProjectZip,
@@ -205,10 +206,17 @@ export default function App() {
           view
         </label>
         <Pomodoro />
+        <button
+          onClick={() => updateData((d) => ({ ...d, settings: { ...d.settings, zenMode: !d.settings.zenMode } }))}
+          title="Hide binder and prompt panel (distraction-free)"
+        >
+          {data.settings.zenMode ? "Exit zen" : "Zen"}
+        </button>
         <button onClick={() => setSettingsOpen(true)}>Settings</button>
         <button onClick={handleLock}>Lock</button>
       </header>
-      <div className="main">
+      <div className={"main" + (data.settings.zenMode ? " zen" : "")}>
+        {!data.settings.zenMode && (
         <Binder
           docs={data.documents}
           activeDocId={activeDocId}
@@ -226,7 +234,12 @@ export default function App() {
           onMove={(id, parentId, index) =>
             updateData((d) => ({ ...d, documents: moveDoc(d.documents, id, parentId, index) }))
           }
+          onDuplicate={(id) => updateData((d) => ({ ...d, documents: duplicateDoc(d.documents, id) }))}
+          onToggleLock={(id, locked) =>
+            updateData((d) => ({ ...d, documents: updateDoc(d.documents, id, { locked }) }))
+          }
         />
+        )}
         <div className="editor-area">
           <Editor
             doc={activeDoc}
@@ -260,11 +273,16 @@ export default function App() {
               setHistoryOpen(true);
             }}
             onHistory={() => setHistoryOpen(true)}
+            onUnlock={() =>
+              activeDoc &&
+              updateData((d) => ({ ...d, documents: updateDoc(d.documents, activeDoc.id, { locked: false }) }))
+            }
           />
           {splitView && (
             <Editor doc={referenceDoc} docs={data.documents} readOnly onSelectDoc={setReferenceDocId} />
           )}
         </div>
+        {!data.settings.zenMode && (
         <PromptPanel
           data={data}
           activeDoc={activeDoc}
@@ -279,6 +297,7 @@ export default function App() {
           }}
           pendingInstruction={pendingInstruction}
         />
+        )}
       </div>
       {settingsOpen && (
         <SettingsModal

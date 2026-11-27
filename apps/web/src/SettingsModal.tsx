@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createId, type ChainDef, type DocNode, type FontName, type PromptEntry, type ProviderKind, type Settings, type ThemeName } from "@inkvault/core";
+import { createId, type ChainDef, type CuratedList, type DocNode, type FontName, type ModelCollection, type PromptEntry, type ProviderKind, type Settings, type ThemeName } from "@inkvault/core";
 import { getDesktopConfig, isTauri, localServerRunning, setDesktopConfig, startLocalServer, stopLocalServer, type DesktopConfig } from "./desktop";
 import Modal from "./Modal";
 
@@ -19,6 +19,13 @@ export default function SettingsModal({
   onClose: () => void;
 }) {
   const [provider, setProvider] = useState<ProviderKind>(settings.provider);
+  const [customBaseUrl, setCustomBaseUrl] = useState(settings.customBaseUrl);
+  const [customApiKey, setCustomApiKey] = useState(settings.customApiKey);
+  const [anthropicApiKey, setAnthropicApiKey] = useState(settings.anthropicApiKey);
+  const [verbosity, setVerbosity] = useState(settings.verbosity);
+  const [reasoningEffort, setReasoningEffort] = useState(settings.reasoningEffort);
+  const [collections, setCollections] = useState<ModelCollection[]>(settings.collections);
+  const [curatedLists, setCuratedLists] = useState<CuratedList[]>(settings.curatedLists);
   const [apiKey, setApiKey] = useState(settings.apiKey);
   const [model, setModel] = useState(settings.model);
   const [localBaseUrl, setLocalBaseUrl] = useState(settings.localBaseUrl);
@@ -90,6 +97,22 @@ export default function SettingsModal({
             <input value={model} onChange={(e) => setModel(e.target.value)} />
           </label>
         </>
+      ) : provider === "custom" ? (
+        <>
+          <label>
+            Custom endpoint base URL (OpenAI-compatible: OpenAI, DeepSeek, Mistral, Groq, Google's /openai endpoint…)
+            <input value={customBaseUrl} onChange={(e) => setCustomBaseUrl(e.target.value)} placeholder="https://api.deepseek.com" />
+          </label>
+          <label>
+            API key for that endpoint (optional; stored only in the vault)
+            <input type="password" value={customApiKey} onChange={(e) => setCustomApiKey(e.target.value)} />
+          </label>
+        </>
+      ) : provider === "anthropic" ? (
+        <label>
+          Anthropic API key (direct; stored only inside your encrypted vault)
+          <input type="password" value={anthropicApiKey} placeholder="sk-ant-…" onChange={(e) => setAnthropicApiKey(e.target.value)} />
+        </label>
       ) : (
         <>
           <label>
@@ -102,6 +125,74 @@ export default function SettingsModal({
           </label>
         </>
       )}
+      <div className="panel-row">
+        <label>
+          Verbosity
+          <select value={verbosity} onChange={(e) => setVerbosity(e.target.value)}>
+            <option value="auto">auto</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+        <label>
+          Reasoning effort (OpenRouter)
+          <select value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)}>
+            <option value="auto">auto</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+      </div>
+      <fieldset className="library">
+        <legend>Model collections (group models by task; comma-separated ids)</legend>
+        {collections.map((c, i) => (
+          <div key={c.id} className="chain-row">
+            <input
+              value={c.name}
+              onChange={(e) => setCollections((prev) => prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+            />
+            <input
+              placeholder="model-id-1, model-id-2"
+              value={c.modelIds.join(", ")}
+              onChange={(e) =>
+                setCollections((prev) =>
+                  prev.map((x, j) => (j === i ? { ...x, modelIds: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } : x)),
+                )
+              }
+            />
+            <button onClick={() => setCollections((prev) => prev.filter((_, j) => j !== i))}>Remove</button>
+          </div>
+        ))}
+        <button onClick={() => setCollections((prev) => [...prev, { id: createId(), name: `Collection ${prev.length + 1}`, modelIds: [] }])}>
+          + Add collection
+        </button>
+      </fieldset>
+      <fieldset className="library">
+        <legend>Curated lists (e.g. your Top 10; comma-separated ids — you maintain the contents)</legend>
+        {curatedLists.map((c, i) => (
+          <div key={c.id} className="chain-row">
+            <input
+              value={c.name}
+              onChange={(e) => setCuratedLists((prev) => prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+            />
+            <input
+              placeholder="model-id-1, model-id-2"
+              value={c.modelIds.join(", ")}
+              onChange={(e) =>
+                setCuratedLists((prev) =>
+                  prev.map((x, j) => (j === i ? { ...x, modelIds: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } : x)),
+                )
+              }
+            />
+            <button onClick={() => setCuratedLists((prev) => prev.filter((_, j) => j !== i))}>Remove</button>
+          </div>
+        ))}
+        <button onClick={() => setCuratedLists((prev) => [...prev, { id: createId(), name: `List ${prev.length + 1}`, modelIds: [] }])}>
+          + Add curated list
+        </button>
+      </fieldset>
       {isTauri() && (
         <fieldset className="library">
           <legend>Local model server (desktop)</legend>
@@ -242,6 +333,13 @@ export default function SettingsModal({
               model,
               localBaseUrl,
               localModel,
+              customBaseUrl,
+              customApiKey,
+              anthropicApiKey,
+              verbosity,
+              reasoningEffort,
+              collections: collections.filter((c) => c.name.trim()),
+              curatedLists: curatedLists.filter((c) => c.name.trim()),
               temperature,
               maxTokens,
               systemPrompt,

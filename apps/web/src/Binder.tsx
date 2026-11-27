@@ -10,6 +10,8 @@ interface BinderProps {
   onDelete: (id: string) => void;
   onToggleContext: (id: string, enabled: boolean) => void;
   onMove: (id: string, parentId: string | null, index: number) => void;
+  onDuplicate: (id: string) => void;
+  onToggleLock: (id: string, locked: boolean) => void;
 }
 
 export default function Binder(props: BinderProps) {
@@ -73,7 +75,8 @@ export default function Binder(props: BinderProps) {
             className={
               (node.kind === "folder" ? "folder-row" : "doc-row") +
               (node.id === props.activeDocId ? " active" : "") +
-              (dragId === node.id ? " dragging" : "")
+              (dragId === node.id ? " dragging" : "") +
+              (node.locked ? " locked" : "")
             }
             style={{ paddingLeft: `${depth * 14 + 6}px` }}
           >
@@ -114,6 +117,7 @@ export default function Binder(props: BinderProps) {
                   setRenameValue(node.title);
                 }}
               >
+                {node.locked ? "🔒 " : ""}
                 {node.title}
               </span>
             )}
@@ -123,6 +127,15 @@ export default function Binder(props: BinderProps) {
                   +
                 </button>
               )}
+              <button title="Duplicate (deep copy)" onClick={() => props.onDuplicate(node.id)}>
+                ⧉
+              </button>
+              <button
+                title={node.locked ? "Unlock document" : "Lock document (read-only)"}
+                onClick={() => props.onToggleLock(node.id, !node.locked)}
+              >
+                {node.locked ? "🔒" : "🔓"}
+              </button>
               <button
                 title="Delete"
                 onClick={() => {

@@ -3,10 +3,12 @@ import {
   compilePrompt,
   estimateCostUsd,
   estimateTokens,
+  fetchAnthropicModels,
   fetchLocalModels,
   fetchModels,
   findAutoContext,
   flattenTree,
+  type CachedModel,
   type CompiledPrompt,
   type DocNode,
   type ProviderKind,
@@ -68,19 +70,62 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
     setModelsBusy(true);
     setModelError(undefined);
     try {
+      let models: CachedModel[];
       if (s.provider === "local") {
-        const localModels = await fetchLocalModels(s.localBaseUrl);
-        updateData((d) => ({ ...d, settings: { ...d.settings, localModels } }));
+        const ids = await fetchLocalModels(s.localBaseUrl);
+        models = ids.map((id) => ({ id, name: id, contextWindow: 0, pricing: { prompt: 0, completion: 0 } }));
+        updateData((d) => ({ ...d, settings: { ...d.settings, localModels: ids } }));
+      } else if (s.provider === "custom") {
+        const ids = await fetchLocalModels(s.customBaseUrl, undefined, s.customApiKey || undefined);
+        models = ids.map((id) => ({ id, name: id, contextWindow: 0, pricing: { prompt: 0, completion: 0 } }));
+      } else if (s.provider === "anthropic") {
+        const ids = await fetchAnthropicModels(s.anthropicApiKey);
+        models = ids.map((id) => ({ id, name: id, contextWindow: 0, pricing: { prompt: 0, completion: 0 } }));
       } else {
-        const models = await fetchModels(s.apiKey);
-        updateData((d) => ({ ...d, settings: { ...d.settings, models } }));
+        models = await fetchModels(s.apiKey);
       }
+      updateData((d) => ({ ...d, settings: { ...d.settings, models } }));
     } catch (e) {
       setModelError(e instanceof Error ? e.message : String(e));
     } finally {
       setModelsBusy(false);
     }
   }
+
+  const modelSelect = (
+    <select
+      value={s.model}
+      onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, model: e.target.value } }))}
+    >
+      <option value="">Select model…</option>
+      {s.curatedLists.map((c) => (
+        <optgroup key={c.id} label={`★ ${c.name}`}>
+          {c.modelIds.map((id) => (
+            <option key={id} value={id}>
+              {id}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+      {s.collections.map((c) => (
+        <optgroup key={c.id} label={`Collection: ${c.name}`}>
+          {c.modelIds.map((id) => (
+            <option key={id} value={id}>
+              {id}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+      <optgroup label="All models">
+        {s.models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name} ({m.id})
+          </option>
+        ))}
+      </optgroup>
+      {s.model && !s.models.some((m) => m.id === s.model) && <option value={s.model}>{s.model} (custom)</option>}
+    </select>
+  );
 
   useEffect(() => {
     if (!pendingInstruction || pendingInstruction.nonce === lastNonceRef.current) return;
@@ -118,9 +163,40 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
           }
         >
           <option value="openrouter">OpenRouter (cloud, BYOK)</option>
+          <option value="custom">Custom endpoint (OpenAI/DeepSeek/Google-compat)</option>
+          <option value="anthropic">Anthropic direct key</option>
           <option value="local">Local (llama.cpp / Ollama)</option>
         </select>
       </div>
+      {s.provider === "custom" && (
+        <>
+          <div className="panel-row">
+            <input
+              placeholder="Base URL, e.g. https://api.deepseek.com"
+              value={s.customBaseUrl}
+              onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, customBaseUrl: e.target.value } }))}
+            />
+          </div>
+          <div className="panel-row">
+            <input
+              type="password"
+              placeholder="API key for this endpoint (optional)"
+              value={s.customApiKey}
+              onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, customApiKey: e.target.value } }))}
+            />
+          </div>
+        </>
+      )}
+      {s.provider === "anthropic" && (
+        <div className="panel-row">
+          <input
+            type="password"
+            placeholder="Anthropic API key (sk-ant-…)"
+            value={s.anthropicApiKey}
+            onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, anthropicApiKey: e.target.value } }))}
+          />
+        </div>
+      )}
       {s.provider === "local" ? (
         <>
           <div className="panel-row">
@@ -157,18 +233,8 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
         </>
       ) : (
         <div className="panel-row">
-          {s.models.length > 0 ? (
-            <select
-              value={s.model}
-              onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, model: e.target.value } }))}
-            >
-              <option value="">Select model…</option>
-              {s.models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.id})
-                </option>
-              ))}
-            </select>
+          {s.models.length > 0 || s.model ? (
+            modelSelect
           ) : (
             <input
               placeholder="Model id, e.g. openai/gpt-4o"
@@ -178,8 +244,8 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
           )}
           <button
             onClick={refreshModels}
-            disabled={modelsBusy || !s.apiKey}
-            title="Fetch model list + pricing from OpenRouter"
+            disabled={modelsBusy || (s.provider === "openrouter" && !s.apiKey) || (s.provider === "anthropic" && !s.anthropicApiKey)}
+            title="Fetch the model list from the selected provider"
           >
             {modelsBusy ? "…" : "Models"}
           </button>
@@ -208,6 +274,33 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
             value={s.maxTokens}
             onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, maxTokens: Number(e.target.value) } }))}
           />
+        </label>
+      </div>
+      <div className="panel-row sliders">
+        <label>
+          Verbosity{" "}
+          <select
+            value={s.verbosity}
+            onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, verbosity: e.target.value } }))}
+          >
+            <option value="auto">auto</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+        <label>
+          Reasoning{" "}
+          <select
+            value={s.reasoningEffort}
+            onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, reasoningEffort: e.target.value } }))}
+            title="Sent to OpenRouter as reasoning.effort"
+          >
+            <option value="auto">auto</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
         </label>
       </div>
       <textarea

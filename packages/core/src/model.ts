@@ -19,6 +19,7 @@ export interface DocNode {
   updatedAt: string;
   snapshots?: Snapshot[];
   loreAliases?: string[];
+  locked?: boolean;
 }
 
 export interface PromptEntry {
@@ -43,7 +44,19 @@ export interface CachedModel {
   pricing: { prompt: number; completion: number };
 }
 
-export type ProviderKind = "openrouter" | "local";
+export type ProviderKind = "openrouter" | "local" | "custom" | "anthropic";
+
+export interface ModelCollection {
+  id: string;
+  name: string;
+  modelIds: string[];
+}
+
+export interface CuratedList {
+  id: string;
+  name: string;
+  modelIds: string[];
+}
 
 export interface Settings {
   provider: ProviderKind;
@@ -52,6 +65,14 @@ export interface Settings {
   localBaseUrl: string;
   localModel: string;
   localModels: string[];
+  customBaseUrl: string;
+  customApiKey: string;
+  anthropicApiKey: string;
+  verbosity: string;
+  reasoningEffort: string;
+  collections: ModelCollection[];
+  curatedLists: CuratedList[];
+  zenMode: boolean;
   temperature: number;
   maxTokens: number;
   systemPrompt: string;
@@ -83,6 +104,14 @@ export function defaultSettings(): Settings {
     localBaseUrl: "http://127.0.0.1:8080",
     localModel: "",
     localModels: [],
+    customBaseUrl: "",
+    customApiKey: "",
+    anthropicApiKey: "",
+    verbosity: "auto",
+    reasoningEffort: "auto",
+    collections: [],
+    curatedLists: [],
+    zenMode: false,
     temperature: 0.8,
     maxTokens: 4096,
     systemPrompt: "You are a precise fiction-writing assistant. Follow the instruction exactly.",
@@ -127,7 +156,7 @@ export function addDoc(
 export function updateDoc(
   docs: DocNode[],
   id: string,
-  patch: Partial<Pick<DocNode, "title" | "content" | "contextEnabled" | "kind" | "loreAliases" | "snapshots">>,
+  patch: Partial<Pick<DocNode, "title" | "content" | "contextEnabled" | "kind" | "loreAliases" | "snapshots" | "locked">>,
   now: string = new Date().toISOString(),
 ): DocNode[] {
   return docs.map((d) => (d.id === id ? { ...d, ...patch, updatedAt: now } : d));
@@ -163,6 +192,38 @@ export function moveDoc(docs: DocNode[], id: string, newParentId: string | null,
   siblings.splice(clamped, 0, { ...node, parentId: newParentId });
   const reordered = new Map(siblings.map((d, i) => [d.id, { ...d, order: i }]));
   return docs.map((d) => reordered.get(d.id) ?? d);
+}
+
+export function duplicateDoc(docs: DocNode[], id: string, now: string = new Date().toISOString()): DocNode[] {
+  const src = docs.find((d) => d.id === id);
+  if (!src) return docs;
+  const clones: DocNode[] = [];
+  const clone = (node: DocNode, parentId: string | null, order: number): string => {
+    const newId = createId();
+    clones.push({
+      ...node,
+      id: newId,
+      parentId,
+      order,
+      title: node === src ? `${node.title} (copy)` : node.title,
+      createdAt: now,
+      updatedAt: now,
+      snapshots: node.snapshots?.map((s) => ({ ...s, id: createId() })),
+    });
+    childrenOf(docs, node.id).forEach((c, i) => clone(c, newId, i));
+    return newId;
+  };
+  const newRootId = clone(src, src.parentId, src.order + 1);
+  const siblings = childrenOf(docs, src.parentId);
+  const at = siblings.findIndex((d) => d.id === src.id);
+  const reordered = [...siblings.slice(0, at + 1), clones[0], ...siblings.slice(at + 1)].map((d, i) => ({
+    ...d,
+    order: i,
+  }));
+  const reorderedIds = new Set(reordered.map((d) => d.id));
+  return [...docs.filter((d) => !reorderedIds.has(d.id)), ...reordered, ...clones.slice(1)].map((d) =>
+    d.id === newRootId ? { ...d, order: at + 1 } : d,
+  );
 }
 
 export interface FlatRow {
