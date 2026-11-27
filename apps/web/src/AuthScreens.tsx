@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { peekVault, VaultError, type VaultData } from "@inkvault/core";
+import { generateKeyfile, peekVault, VaultError, type VaultData } from "@inkvault/core";
+import { download } from "./download";
 import { importVaultFile, loadStoredVault, saveNewVault, unlockVault, type StoredVault } from "./vaultStore";
 import { supportsFileAccess } from "./fileVault";
 import { isTauri } from "./desktop";
@@ -94,21 +95,56 @@ export function AuthScreen({
 }
 
 function KeyfileInput({ onKeyfile }: { onKeyfile: (keyfile: Uint8Array | undefined) => void }) {
+  const [hasKeyfile, setHasKeyfile] = useState(false);
+
+  function generate() {
+    const bytes = generateKeyfile();
+    download("inkvault.key", bytes, "application/octet-stream");
+    onKeyfile(bytes);
+    setHasKeyfile(true);
+  }
+
   return (
-    <label>
-      Keyfile (optional)
-      <input
-        type="file"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (!file) {
-            onKeyfile(undefined);
-            return;
-          }
-          file.arrayBuffer().then((buf) => onKeyfile(new Uint8Array(buf)));
-        }}
-      />
-    </label>
+    <div className="keyfile-block">
+      <label>
+        Keyfile (optional)
+        <input
+          type="file"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) {
+              onKeyfile(undefined);
+              setHasKeyfile(false);
+              return;
+            }
+            file.arrayBuffer().then((buf) => {
+              onKeyfile(new Uint8Array(buf));
+              setHasKeyfile(true);
+            });
+          }}
+        />
+      </label>
+      <div className="panel-row">
+        <button type="button" onClick={generate}>
+          {hasKeyfile ? "Keyfile ready (inkvault.key downloaded)" : "Generate a keyfile for me"}
+        </button>
+      </div>
+      <details className="help">
+        <summary>What is a keyfile? How do I get one?</summary>
+        <div className="muted small">
+          <p>
+            A keyfile is an optional second factor for unlocking the vault: the vault opens only with the
+            passphrase <em>and</em> the keyfile. Generate one here (a random <code>inkvault.key</code> file is
+            downloaded to your device) or pick any existing file. There is nowhere to "get" one — you create it.
+          </p>
+          <p>
+            Store it somewhere safe and separate from the <code>.vault</code> file (USB drive, password manager,
+            cloud drive) — never inside the vault or next to it. If you lose both the keyfile and the
+            passphrase, the vault is unrecoverable by design. We never upload the keyfile anywhere.
+          </p>
+        </div>
+      </details>
+    </div>
   );
 }
 
