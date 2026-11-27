@@ -18,6 +18,7 @@ export interface DocNode {
   createdAt: string;
   updatedAt: string;
   snapshots?: Snapshot[];
+  loreAliases?: string[];
 }
 
 export interface PromptEntry {
@@ -25,6 +26,15 @@ export interface PromptEntry {
   label: string;
   instruction: string;
 }
+
+export interface ChainDef {
+  id: string;
+  name: string;
+  steps: string[];
+}
+
+export type ThemeName = "dark" | "light" | "high-contrast";
+export type FontName = "default" | "dyslexic";
 
 export interface CachedModel {
   id: string;
@@ -47,6 +57,10 @@ export interface Settings {
   systemPrompt: string;
   models: CachedModel[];
   promptLibrary: PromptEntry[];
+  chains: ChainDef[];
+  theme: ThemeName;
+  font: FontName;
+  autoLorebook: boolean;
 }
 
 export interface GenerationRecord {
@@ -74,6 +88,10 @@ export function defaultSettings(): Settings {
     systemPrompt: "You are a precise fiction-writing assistant. Follow the instruction exactly.",
     models: [],
     promptLibrary: [],
+    chains: [],
+    theme: "dark",
+    font: "default",
+    autoLorebook: true,
   };
 }
 
@@ -109,7 +127,7 @@ export function addDoc(
 export function updateDoc(
   docs: DocNode[],
   id: string,
-  patch: Partial<Pick<DocNode, "title" | "content" | "contextEnabled" | "kind">>,
+  patch: Partial<Pick<DocNode, "title" | "content" | "contextEnabled" | "kind" | "loreAliases" | "snapshots">>,
   now: string = new Date().toISOString(),
 ): DocNode[] {
   return docs.map((d) => (d.id === id ? { ...d, ...patch, updatedAt: now } : d));

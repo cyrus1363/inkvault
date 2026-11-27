@@ -70,6 +70,11 @@ export default function App() {
       .catch(() => setScreen("auth"));
   }, []);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = data?.settings.theme ?? "dark";
+    document.body.classList.toggle("font-dyslexic", data?.settings.font === "dyslexic");
+  }, [data?.settings.theme, data?.settings.font]);
+
   const updateData = useCallback((mutate: (d: VaultData) => VaultData) => {
     const prev = dataRef.current;
     if (!prev) return;
@@ -184,6 +189,7 @@ export default function App() {
           <input type="checkbox" checked={splitView} onChange={(e) => setSplitView(e.target.checked)} /> Split
           view
         </label>
+        <Pomodoro />
         <button onClick={() => setSettingsOpen(true)}>Settings</button>
         <button onClick={handleLock}>Lock</button>
       </header>
@@ -262,8 +268,15 @@ export default function App() {
       {settingsOpen && (
         <SettingsModal
           settings={data.settings}
+          docs={data.documents}
           onClose={() => setSettingsOpen(false)}
           onSave={(patch) => updateData((d) => ({ ...d, settings: { ...d.settings, ...patch } }))}
+          onSaveAliases={(docId, list) =>
+            updateData((d) => ({
+              ...d,
+              documents: updateDoc(d.documents, docId, { loreAliases: list }),
+            }))
+          }
         />
       )}
       {revise && reviseDoc && (
@@ -284,5 +297,30 @@ export default function App() {
         <FindReplaceModal data={data} activeDoc={activeDoc} updateData={updateData} onClose={() => setFindReplaceOpen(false)} />
       )}
     </div>
+  );
+}
+
+function Pomodoro() {
+  const [seconds, setSeconds] = useState(25 * 60);
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(() => setSeconds((s) => Math.max(0, s - 1)), 1000);
+    return () => window.clearInterval(t);
+  }, [running]);
+
+  useEffect(() => {
+    if (seconds === 0) setRunning(false);
+  }, [seconds]);
+
+  const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const ss = String(seconds % 60).padStart(2, "0");
+  return (
+    <span className="pomodoro small">
+      <button onClick={() => setRunning((r) => !r)}>{running ? "Pause" : "Sprint"}</button>
+      <button onClick={() => { setRunning(false); setSeconds(25 * 60); }}>Reset</button>
+      <span>{mm}:{ss}</span>
+    </span>
   );
 }

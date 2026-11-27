@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PromptEntry, ProviderKind, Settings } from "@inkvault/core";
+import { createId, type ChainDef, type DocNode, type FontName, type PromptEntry, type ProviderKind, type Settings, type ThemeName } from "@inkvault/core";
 import { getDesktopConfig, isTauri, localServerRunning, setDesktopConfig, startLocalServer, stopLocalServer, type DesktopConfig } from "./desktop";
 import Modal from "./Modal";
 
@@ -7,11 +7,15 @@ const SLOTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
 export default function SettingsModal({
   settings,
+  docs,
   onSave,
+  onSaveAliases,
   onClose,
 }: {
   settings: Settings;
+  docs: DocNode[];
   onSave: (patch: Partial<Settings>) => void;
+  onSaveAliases: (docId: string, aliases: string[]) => void;
   onClose: () => void;
 }) {
   const [provider, setProvider] = useState<ProviderKind>(settings.provider);
@@ -26,6 +30,13 @@ export default function SettingsModal({
   const [maxTokens, setMaxTokens] = useState(settings.maxTokens);
   const [systemPrompt, setSystemPrompt] = useState(settings.systemPrompt);
   const [library, setLibrary] = useState<PromptEntry[]>(settings.promptLibrary);
+  const [chains, setChains] = useState<ChainDef[]>(settings.chains);
+  const [theme, setTheme] = useState<ThemeName>(settings.theme);
+  const [font, setFont] = useState<FontName>(settings.font);
+  const [autoLorebook, setAutoLorebook] = useState(settings.autoLorebook);
+  const [aliases, setAliases] = useState<Record<string, string>>(() =>
+    Object.fromEntries(docs.filter((d) => d.kind === "document").map((d) => [d.id, (d.loreAliases ?? []).join(", ")])),
+  );
 
   const setSlot = (slot: string, patch: Partial<PromptEntry>) => {
     setLibrary((prev) => {
@@ -149,6 +160,56 @@ export default function SettingsModal({
         System prompt
         <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={3} />
       </label>
+      <label>
+        Theme
+        <select value={theme} onChange={(e) => setTheme(e.target.value as ThemeName)}>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="high-contrast">High contrast</option>
+        </select>
+      </label>
+      <label>
+        Font
+        <select value={font} onChange={(e) => setFont(e.target.value as FontName)}>
+          <option value="default">Default</option>
+          <option value="dyslexic">OpenDyslexic</option>
+        </select>
+      </label>
+      <label className="row-check">
+        <input type="checkbox" checked={autoLorebook} onChange={(e) => setAutoLorebook(e.target.checked)} />
+        Auto-include lorebook sheets when their names/aliases appear in the active document
+      </label>
+      <fieldset className="library">
+        <legend>Lorebook aliases (comma-separated, per document)</legend>
+        {docs.filter((d) => d.kind === "document").map((d) => (
+          <div key={d.id} className="library-row">
+            <span className="slot">✦</span>
+            <span className="muted small">{d.title}</span>
+            <input
+              placeholder="aliases, e.g. Ada, Countess"
+              value={aliases[d.id] ?? ""}
+              onChange={(e) => setAliases((prev) => ({ ...prev, [d.id]: e.target.value }))}
+            />
+          </div>
+        ))}
+      </fieldset>
+      <fieldset className="library">
+        <legend>Prompt chains (one instruction per line, run in order)</legend>
+        {chains.map((c, i) => (
+          <div key={c.id} className="chain-row">
+            <input value={c.name} onChange={(e) => setChains((prev) => prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+            <textarea
+              rows={3}
+              value={c.steps.join("\n")}
+              onChange={(e) => setChains((prev) => prev.map((x, j) => (j === i ? { ...x, steps: e.target.value.split("\n").filter((l) => l.trim()) } : x)))}
+            />
+            <button onClick={() => setChains((prev) => prev.filter((_, j) => j !== i))}>Remove</button>
+          </div>
+        ))}
+        <button onClick={() => setChains((prev) => [...prev, { id: createId(), name: `Chain ${prev.length + 1}`, steps: [""] }])}>
+          + Add chain
+        </button>
+      </fieldset>
       <fieldset className="library">
         <legend>Hotkey prompt library (Ctrl/Cmd + 1–0)</legend>
         {SLOTS.map((slot) => {
@@ -183,7 +244,15 @@ export default function SettingsModal({
               maxTokens,
               systemPrompt,
               promptLibrary: library.filter((p) => p.instruction.trim()),
+              chains: chains.filter((c) => c.name.trim() && c.steps.length > 0),
+              theme,
+              font,
+              autoLorebook,
             });
+            for (const [docId, value] of Object.entries(aliases)) {
+              const list = value.split(",").map((a) => a.trim()).filter(Boolean);
+              onSaveAliases(docId, list);
+            }
             onClose();
           }}
         >

@@ -39,13 +39,16 @@ export default function ReviseModal({
   );
 
   async function run() {
-    const result = await gen.generate({
-      instruction: "",
-      contextDocs,
-      activeDoc: null,
-      selectionOverride: { text: selection, directions: directions.trim() || "improve it" },
-    });
-    if (result) setShowDiff(true);
+    await gen.generate(
+      {
+        instruction: "",
+        contextDocs,
+        activeDoc: null,
+        selectionOverride: { text: selection, directions: directions.trim() || "improve it" },
+      },
+      "revise",
+    );
+    setShowDiff(true);
   }
 
   function apply(accepted: (index: number) => boolean) {
@@ -76,7 +79,7 @@ export default function ReviseModal({
         {gen.error && <p className="error small">{gen.error}</p>}
         <div className="panel-row">
           {gen.streaming ? (
-            <button onClick={gen.stop}>Stop</button>
+            <button onClick={() => gen.stop()}>Stop</button>
           ) : (
             <button onClick={run} disabled={!directions.trim() && !selection}>
               Run revise

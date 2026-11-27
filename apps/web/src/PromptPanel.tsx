@@ -5,6 +5,7 @@ import {
   estimateTokens,
   fetchLocalModels,
   fetchModels,
+  findAutoContext,
   flattenTree,
   type CompiledPrompt,
   type DocNode,
@@ -29,17 +30,22 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
   const [showLast, setShowLast] = useState(false);
   const [modelsBusy, setModelsBusy] = useState(false);
   const [modelError, setModelError] = useState<string>();
+  const [excludedAuto, setExcludedAuto] = useState<Set<string>>(new Set());
   const lastNonceRef = useRef(0);
 
   const gen = useGenerate(data, updateData);
 
-  const contextDocs = useMemo(
-    () =>
-      flattenTree(data.documents)
-        .map((r) => r.node)
-        .filter((d) => d.kind === "document" && d.contextEnabled),
-    [data.documents],
+  const treeDocs = useMemo(() => flattenTree(data.documents).map((r) => r.node), [data.documents]);
+  const enabledDocs = useMemo(
+    () => treeDocs.filter((d) => d.kind === "document" && d.contextEnabled),
+    [treeDocs],
   );
+  const autoDocs = useMemo(() => {
+    if (!s.autoLorebook || !activeDoc) return [];
+    return findAutoContext(data.documents, activeDoc.id, activeDoc.content).filter((d) => !excludedAuto.has(d.id));
+  }, [s.autoLorebook, activeDoc, data.documents, excludedAuto]);
+  const contextDocs = useMemo(() => [...enabledDocs, ...autoDocs], [enabledDocs, autoDocs]);
+
   const contextTokens = useMemo(
     () => contextDocs.reduce((n, d) => n + estimateTokens(d.content), 0),
     [contextDocs],
@@ -53,6 +59,7 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
     [contextTokens, instruction, s.systemPrompt, activeDoc],
   );
   const maxCostUsd = gen.pricing ? estimateCostUsd(gen.pricing, promptEst, s.maxTokens) : null;
+  const activeModelId = s.provider === "local" ? s.localModel : s.model;
 
   const buildInput = (text: string) => ({ instruction: text, contextDocs, activeDoc });
 
@@ -73,8 +80,6 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
       setModelsBusy(false);
     }
   }
-
-  const activeModelId = s.provider === "local" ? s.localModel : s.model;
 
   useEffect(() => {
     if (!pendingInstruction || pendingInstruction.nonce === lastNonceRef.current) return;
@@ -99,6 +104,7 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
   }, [s.promptLibrary, contextDocs, activeDoc, gen.generate]);
 
   const lastGeneration = data.generations[0];
+  const [chainId, setChainId] = useState("");
 
   return (
     <aside className="prompt-panel">
@@ -209,9 +215,19 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
         rows={3}
       />
       <div className="muted small">
-        Context: {contextDocs.length} doc(s) ≈ {contextTokens} tok · prompt ≈ {promptEst} tok
-        {maxCostUsd !== null ? ` · up to $${maxCostUsd.toFixed(4)}` : ""}
+        Context: {enabledDocs.length} on{autoDocs.length > 0 ? ` + ${autoDocs.length} auto` : ""} · ≈{contextTokens} tok ·
+        prompt ≈ {promptEst} tok{maxCostUsd !== null ? ` · up to $${maxCostUsd.toFixed(4)}` : ""}
       </div>
+      {autoDocs.length > 0 && (
+        <div className="chips">
+          {autoDocs.map((d) => (
+            <button key={d.id} className="chip auto" title={`Auto-included: matched in "${activeDoc?.title}" — click to exclude`}
+              onClick={() => setExcludedAuto((prev) => new Set(prev).add(d.id))}>
+              ✦ {d.title} ×
+            </button>
+          ))}
+        </div>
+      )}
       <div className="panel-row buttons">
         <button
           onClick={() => setPreview(compilePrompt({ systemPrompt: s.systemPrompt, instruction, contextDocs, activeDoc }))}
@@ -222,21 +238,72 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
           Last prompt
         </button>
         {gen.streaming ? (
-          <button onClick={gen.stop}>Stop</button>
+          <button onClick={() => gen.stop()}>Stop</button>
         ) : (
-          <button onClick={() => void gen.generate(buildInput(instruction))} disabled={!instruction.trim() || !activeModelId}>
-            Generate
-          </button>
+          <>
+            <button onClick={() => void gen.generate(buildInput(instruction))} disabled={!instruction.trim() || !activeModelId}>
+              Generate
+            </button>
+            <button
+              onClick={() => {
+                void gen.generate(buildInput(instruction), "A");
+                void gen.generate(buildInput(instruction), "B");
+                void gen.generate(buildInput(instruction), "C");
+              }}
+              disabled={!instruction.trim() || !activeModelId}
+              title="Generate 3 takes of the same prompt for kit-bashing"
+            >
+              Kit bash ×3
+            </button>
+          </>
         )}
+        {s.chains.length > 0 && (
+          <>
+            <select value={chainId} onChange={(e) => setChainId(e.target.value)}>
+              <option value="">Run chain…</option>
+              {s.chains.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                const chain = s.chains.find((c) => c.id === chainId);
+                if (chain) void gen.runChain(chain, contextDocs, activeDoc);
+              }}
+              disabled={!chainId || gen.streaming}
+            >
+              Run
+            </button>
+          </>
+        )}
+      </div>
+      {gen.takes.length > 0 && (
+        <div className="take-tabs">
+          {gen.takes.map((t) => (
+            <button
+              key={t.id}
+              className={"take-tab" + (t.id === gen.activeTakeId ? " active" : "")}
+              onClick={() => gen.setActiveTakeId(t.id)}
+            >
+              {t.streaming ? "…" : ""}
+              {t.label}
+              <span onClick={(e) => { e.stopPropagation(); gen.removeTake(t.id); }}> ×</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="panel-row buttons">
         <button onClick={() => onAppend(gen.output)} disabled={!gen.output || !activeDoc}>
           Append to doc
         </button>
-        <button onClick={gen.clear} disabled={!gen.output}>
-          Clear
+        <button onClick={gen.clear} disabled={gen.takes.length === 0}>
+          Clear takes
         </button>
+        {gen.takes.length > 1 && <button onClick={gen.stopAll}>Stop all</button>}
       </div>
       {gen.error && <p className="error small">{gen.error}</p>}
-      {modelError && <p className="error small">{modelError}</p>}
       <pre className="output">{gen.output}{gen.streaming ? "▌" : ""}</pre>
       {preview && (
         <Modal title="Prompt preview" onClose={() => setPreview(null)}>

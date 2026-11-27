@@ -9,6 +9,67 @@
   --error: #f7768e;
 }
 
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f5f0;
+  --panel: #ffffff;
+  --border: #d5d3c8;
+  --fg: #1c1c1c;
+  --muted: #5c5c54;
+  --accent: #2b5cb8;
+  --error: #b3122f;
+}
+
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background: #ffffff;
+}
+
+[data-theme="light"] .output,
+[data-theme="light"] .modal-body pre,
+[data-theme="light"] .selection-preview,
+[data-theme="light"] .hunk.del pre,
+[data-theme="light"] .hunk.add pre {
+  background: #eceae2;
+  color: #1c1c1c;
+}
+
+[data-theme="light"] .hunk.del pre {
+  color: #b3122f;
+}
+
+[data-theme="light"] .hunk.add pre {
+  color: #146c2e;
+}
+
+[data-theme="high-contrast"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --panel: #000000;
+  --border: #ffffff;
+  --fg: #ffffff;
+  --muted: #ffff00;
+  --accent: #00e0ff;
+  --error: #ff5050;
+}
+
+[data-theme="high-contrast"] input,
+[data-theme="high-contrast"] select,
+[data-theme="high-contrast"] textarea,
+[data-theme="high-contrast"] .output {
+  background: #000000;
+  border-color: #ffffff;
+}
+
+body.font-dyslexic {
+  font-family: "OpenDyslexic", ui-sans-serif, sans-serif;
+}
+
+body.font-dyslexic .doc-body {
+  font-family: "OpenDyslexic", ui-monospace, monospace;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -521,4 +582,78 @@ button:disabled {
   color: var(--accent);
   font-weight: 700;
   text-align: center;
+}
+
+.row-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg) !important;
+}
+
+.chain-row {
+  display: grid;
+  grid-template-columns: 10rem 1fr auto;
+  gap: 0.4rem;
+  align-items: start;
+}
+
+.chain-row button {
+  font-weight: 400;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.chip {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg);
+  font-weight: 400;
+}
+
+.chip.auto {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.take-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.take-tab {
+  font-weight: 400;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  background: #262b35;
+  color: var(--fg);
+  border-radius: 4px;
+}
+
+.take-tab.active {
+  background: var(--accent);
+  color: #0b0d10;
+}
+
+.pomodoro {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomodoro button {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 400;
 }
