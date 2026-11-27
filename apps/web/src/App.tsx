@@ -314,6 +314,7 @@ export default function App() {
               documents: updateDoc(d.documents, docId, { loreAliases: list }),
             }))
           }
+          onImportDocs={(nodes) => updateData((d) => ({ ...d, documents: nodes }))}
         />
       )}
       {revise && reviseDoc && (

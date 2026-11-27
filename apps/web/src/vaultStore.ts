@@ -1,6 +1,7 @@
 import { createVault, emptyVaultData, openVault, type VaultData } from "@inkvault/core";
 import { writeToSavedHandle, pickVaultFile } from "./fileVault";
-import { isTauri, nativeLoadVault, nativeSaveVault, nativePickPath, defaultVaultPath, vaultFileExists } from "./desktop";
+import { isTauri, nativeLoadVault, nativeSaveVault, nativePickPath, defaultVaultPath, vaultFileExists, getDesktopConfig } from "./desktop";
+import { exportDataToFolder } from "./folderStore";
 import { idbGet, idbSet } from "./idb";
 
 const VAULT_KEY = "vault-file";
@@ -146,6 +147,15 @@ export async function persistVaultData(stored: StoredVault, data: VaultData): Pr
         await nativeSaveVault(path, bytes);
       } catch {
         // native write is best-effort; IndexedDB copy is authoritative
+      }
+    }
+    // opt-in plain-Markdown mirror (unencrypted, for e.g. Dropbox sync)
+    const cfg = getDesktopConfig();
+    if (cfg.mdSync && cfg.mdFolder) {
+      try {
+        await exportDataToFolder(cfg.mdFolder, data);
+      } catch {
+        // mirror is best-effort; the encrypted vault remains authoritative
       }
     }
   }

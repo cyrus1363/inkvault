@@ -868,3 +868,32 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 4px;
 }
+
+/* model download manager */
+.download-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+.download-progress .bar {
+  flex: 1;
+  height: 0.55rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-inset, #dcd3c6);
+}
+.download-progress .bar > div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent, #8a7332);
+  transition: width 0.25s ease;
+}
+.download-progress .bar > div.indeterminate {
+  width: 35%;
+  animation: download-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes download-pulse {
+  from { margin-left: 0; }
+  to { margin-left: 65%; }
+}

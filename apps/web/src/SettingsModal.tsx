@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createId, type ChainDef, type CuratedList, type DocNode, type FontName, type ModelCollection, type PromptEntry, type ProviderKind, type Settings, type ThemeName } from "@inkvault/core";
-import { getDesktopConfig, isTauri, localServerRunning, setDesktopConfig, startLocalServer, stopLocalServer, type DesktopConfig } from "./desktop";
+import { cancelDownload, defaultModelsDir, downloadModel, getDesktopConfig, isTauri, localServerRunning, pickFolderPath, setDesktopConfig, startLocalServer, stopLocalServer, type DesktopConfig, type DownloadProgress } from "./desktop";
+import { importDataFromFolder } from "./folderStore";
 import Modal from "./Modal";
 import DataHelpSection from "./DataHelp";
 
@@ -11,12 +12,14 @@ export default function SettingsModal({
   docs,
   onSave,
   onSaveAliases,
+  onImportDocs,
   onClose,
 }: {
   settings: Settings;
   docs: DocNode[];
   onSave: (patch: Partial<Settings>) => void;
   onSaveAliases: (docId: string, aliases: string[]) => void;
+  onImportDocs: (nodes: DocNode[]) => void;
   onClose: () => void;
 }) {
   const [provider, setProvider] = useState<ProviderKind>(settings.provider);
@@ -34,6 +37,13 @@ export default function SettingsModal({
   const [serverCfg, setServerCfg] = useState<DesktopConfig>(getDesktopConfig());
   const [serverBusy, setServerBusy] = useState(false);
   const [serverMsg, setServerMsg] = useState<string>();
+  const [dlUrl, setDlUrl] = useState("");
+  const [dl, setDl] = useState<(DownloadProgress & { id: string; dest: string }) | null>(null);
+  const [mdCfg, setMdCfg] = useState(() => {
+    const c = getDesktopConfig();
+    return { mdFolder: c.mdFolder ?? "", mdSync: !!c.mdSync };
+  });
+  const [mdMsg, setMdMsg] = useState<string>();
   const [temperature, setTemperature] = useState(settings.temperature);
   const [maxTokens, setMaxTokens] = useState(settings.maxTokens);
   const [systemPrompt, setSystemPrompt] = useState(settings.systemPrompt);
@@ -70,6 +80,66 @@ export default function SettingsModal({
       setServerMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setServerBusy(false);
+    }
+  }
+
+  async function startDownload() {
+    const url = dlUrl.trim();
+    if (!url || dl?.status === "downloading") return;
+    setServerMsg(undefined);
+    try {
+      const dir = await defaultModelsDir();
+      const name = decodeURIComponent(url.split("?")[0].split(/[\\/]/).pop() ?? "model.gguf");
+      const dest = (dir.endsWith("/") || dir.endsWith("\\") ? dir : `${dir}/`) + name;
+      const id = createId();
+      setDl({ id, dest, status: "downloading", downloaded: 0 });
+      await downloadModel(id, url, dest, (p) => {
+        setDl((prev) => (prev && prev.id === id ? { ...prev, ...p } : prev));
+        if (p.status === "done") {
+          setServerCfg((c) => ({ ...c, modelPath: dest }));
+          setServerMsg(`Model saved to ${dest}. Point the local server at it and start.`);
+        }
+        if (p.status === "error") setServerMsg(p.message ?? "Download failed");
+      });
+    } catch (e) {
+      setServerMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
+  const dlPercent = dl?.total ? Math.min(100, Math.round((dl.downloaded / dl.total) * 100)) : undefined;
+
+  async function pickMdFolder() {
+    try {
+      const path = await pickFolderPath();
+      if (!path) return;
+      setMdCfg((c) => ({ ...c, mdFolder: path }));
+      setDesktopConfig({ ...getDesktopConfig(), mdFolder: path });
+      setMdMsg(undefined);
+    } catch (e) {
+      setMdMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function toggleMdSync(on: boolean) {
+    setMdCfg((c) => ({ ...c, mdSync: on }));
+    setDesktopConfig({ ...getDesktopConfig(), mdSync: on });
+  }
+
+  async function importFromFolder() {
+    if (!mdCfg.mdFolder) return;
+    const docsCount = docs.filter((d) => d.kind === "document").length;
+    if (!window.confirm(`Import replaces all ${docsCount} document(s) in the binder with the .md files in this folder. Continue?`)) {
+      return;
+    }
+    try {
+      const nodes = await importDataFromFolder(mdCfg.mdFolder);
+      onImportDocs(nodes);
+      const nd = nodes.filter((n) => n.kind === "document").length;
+      const nf = nodes.filter((n) => n.kind === "folder").length;
+      setMdMsg(`Imported ${nd} document(s) in ${nf} folder(s).`);
+    } catch (e) {
+      setMdMsg(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -205,6 +275,40 @@ export default function SettingsModal({
             GGUF model path
             <input value={serverCfg.modelPath} onChange={(e) => setServerCfg({ ...serverCfg, modelPath: e.target.value })} placeholder="/models/qwen3-8b.gguf" />
           </label>
+          <label>
+            Download a model (.gguf URL — Hugging Face etc.; saved to the app's models folder, resumable)
+            <input
+              value={dlUrl}
+              onChange={(e) => setDlUrl(e.target.value)}
+              placeholder="https://huggingface.co/<org>/<repo>/resolve/main/model-q4_k_m.gguf"
+            />
+          </label>
+          {dl && (
+            <div className="download-progress">
+              {dl.status === "downloading" ? (
+                <>
+                  <div className="bar">
+                    <div
+                      className={dlPercent === undefined ? "indeterminate" : ""}
+                      style={{ width: dlPercent === undefined ? undefined : `${dlPercent}%` }}
+                    />
+                  </div>
+                  <span className="muted small">
+                    {dlPercent !== undefined ? `${dlPercent}% ` : ""}
+                    {mb(dl.downloaded)}
+                    {dl.total ? ` / ${mb(dl.total)}` : ""}
+                  </span>
+                  <button onClick={() => cancelDownload(dl.id)}>Stop</button>
+                </>
+              ) : (
+                <span className="muted small">
+                  {dl.status === "done" && `Done — ${mb(dl.downloaded)} at ${dl.dest}`}
+                  {dl.status === "cancelled" && "Download stopped (progress kept — it resumes next time)"}
+                  {dl.status === "error" && (dl.message ?? "Download failed")}
+                </span>
+              )}
+            </div>
+          )}
           <div className="panel-row">
             <label>
               Host
@@ -223,6 +327,28 @@ export default function SettingsModal({
             </button>
           </div>
           {serverMsg && <p className="muted small">{serverMsg}</p>}
+        </fieldset>
+      )}
+      {isTauri() && (
+        <fieldset className="library">
+          <legend>Plain-Markdown folder (optional, unencrypted — e.g. for Dropbox)</legend>
+          <div className="panel-row">
+            <button onClick={pickMdFolder}>{mdCfg.mdFolder ? "Change folder…" : "Choose folder…"}</button>
+            <label className="row-check">
+              <input
+                type="checkbox"
+                disabled={!mdCfg.mdFolder}
+                checked={mdCfg.mdSync}
+                onChange={(e) => toggleMdSync(e.target.checked)}
+              />{" "}
+              Mirror every save as .md files
+            </label>
+          </div>
+          {mdCfg.mdFolder && <p className="muted small">{mdCfg.mdFolder}</p>}
+          <button onClick={importFromFolder} disabled={!mdCfg.mdFolder}>
+            Import documents from folder (replaces the binder)
+          </button>
+          {mdMsg && <p className="muted small">{mdMsg}</p>}
         </fieldset>
       )}
       <label>
