@@ -11,6 +11,7 @@ interface EditorProps {
   onBackslash?: (selection: string, start: number, end: number) => void;
   onSnapshot?: () => void;
   onHistory?: () => void;
+  onUnlock?: () => void;
 }
 
 export default function Editor(props: EditorProps) {
@@ -75,6 +76,11 @@ export default function Editor(props: EditorProps) {
       )}
       {props.doc ? (
         <>
+          {props.doc.locked && (
+            <div className="lock-banner">
+              🔒 Locked (read-only). <button onClick={props.onUnlock}>Unlock</button>
+            </div>
+          )}
           <div className="editor-toolbar">
             {props.readOnly ? (
               <h2 className="doc-title-readonly">{props.doc.title}</h2>
@@ -102,7 +108,7 @@ export default function Editor(props: EditorProps) {
             ref={taRef}
             className="doc-body"
             value={props.doc.content}
-            readOnly={props.readOnly}
+            readOnly={props.readOnly || props.doc.locked}
             placeholder={props.readOnly ? "Pick a document above" : "Start writing…"}
             onChange={(e) => props.onChange?.(e.target.value)}
             onKeyDown={(e) => {

@@ -53,11 +53,55 @@ export async function streamLocalChat(opts: LocalChatOptions, cb: StreamCallback
   }
 }
 
-export async function fetchLocalModels(baseUrl: string, signal?: AbortSignal): Promise<string[]> {
+export interface CustomChatOptions {
+  baseUrl: string;
+  apiKey?: string;
+  model: string;
+  messages: { role: string; content: string }[];
+  temperature?: number;
+  maxTokens?: number;
+  signal?: AbortSignal;
+}
+
+export async function streamCustomChat(opts: CustomChatOptions, cb: StreamCallbacks = {}): Promise<CompletionInfo> {
+  const base = normalizeBaseUrl(opts.baseUrl);
+  if (!opts.model) {
+    throw new ProviderError(0, "No model selected. Pick a model in the prompt panel.");
+  }
+  try {
+    const info = await streamChatCompletion(
+      {
+        url: `${base}/v1/chat/completions`,
+        headers: {
+          "Content-Type": "application/json",
+          ...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
+        },
+        body: {
+          model: opts.model,
+          messages: opts.messages,
+          temperature: opts.temperature ?? 0.8,
+          max_tokens: opts.maxTokens ?? 4096,
+          stream: true,
+        },
+        signal: opts.signal,
+      },
+      cb,
+    );
+    return { ...info, model: opts.model };
+  } catch (e) {
+    if (e instanceof ProviderError) throw e;
+    throw unreachable(base, e);
+  }
+}
+
+export async function fetchLocalModels(baseUrl: string, signal?: AbortSignal, apiKey?: string): Promise<string[]> {
   const base = normalizeBaseUrl(baseUrl);
   let res: Response;
   try {
-    res = await fetch(`${base}/v1/models`, { signal });
+    res = await fetch(`${base}/v1/models`, {
+      signal,
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+    });
   } catch (e) {
     throw unreachable(base, e);
   }

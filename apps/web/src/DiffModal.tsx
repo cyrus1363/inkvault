@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { hunkText, type DiffHunk } from "@inkvault/core";
 import Modal from "./Modal";
 
@@ -26,6 +26,20 @@ export default function DiffModal({
     });
   };
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "a") {
+        setAccepted(new Set(hunks.map((h, i) => (h.type === "keep" ? -1 : i)).filter((i) => i >= 0)));
+      } else if (e.key === "x") {
+        setAccepted(new Set());
+      } else if (e.key === "Enter" && onApply) {
+        onApply((i) => accepted.has(i));
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [hunks, accepted, onApply]);
+
   return (
     <Modal title={title} onClose={onClose}>
       {hunks.length === 0 && <p className="muted">No differences.</p>}
@@ -49,7 +63,10 @@ export default function DiffModal({
       ))}
       <div className="panel-row">
         {onApply && (
-          <button onClick={() => onApply((i) => accepted.has(i))}>Apply accepted</button>
+          <>
+            <button onClick={() => onApply((i) => accepted.has(i))}>Apply accepted (Enter)</button>
+            <span className="muted small">a = accept all · x = reject all</span>
+          </>
         )}
         <button onClick={onClose}>{onApply ? "Cancel" : "Close"}</button>
       </div>

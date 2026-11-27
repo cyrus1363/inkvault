@@ -30,6 +30,8 @@ export interface ChatCompletionOptions {
   messages: { role: string; content: string }[];
   temperature?: number;
   maxTokens?: number;
+  verbosity?: string;
+  reasoningEffort?: string;
   signal?: AbortSignal;
 }
 
@@ -59,7 +61,7 @@ export function friendlyMessage(status: number, message: string): string {
   }
 }
 
-async function toProviderError(res: Response): Promise<ProviderError> {
+export async function toProviderError(res: Response): Promise<ProviderError> {
   let raw = "";
   try {
     raw = await res.text();
@@ -170,6 +172,10 @@ export async function streamChat(opts: ChatCompletionOptions, cb: StreamCallback
         max_tokens: opts.maxTokens ?? 4096,
         stream: true,
         stream_options: { include_usage: true },
+        ...(opts.verbosity && opts.verbosity !== "auto" ? { verbosity: opts.verbosity } : {}),
+        ...(opts.reasoningEffort && opts.reasoningEffort !== "auto"
+          ? { reasoning: { effort: opts.reasoningEffort } }
+          : {}),
       },
       signal: opts.signal,
     },

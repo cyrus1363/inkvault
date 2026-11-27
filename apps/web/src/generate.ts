@@ -2,7 +2,9 @@ import { useCallback, useRef, useState } from "react";
 import {
   compilePrompt,
   estimateCostUsd,
+  streamAnthropicChat,
   streamChat,
+  streamCustomChat,
   streamLocalChat,
   type ChainDef,
   type CompiledPrompt,
@@ -58,10 +60,23 @@ export function useGenerate(data: VaultData, updateData: (mutate: (d: VaultData)
       const info: CompletionInfo =
         s.provider === "local"
           ? await streamLocalChat({ ...base, baseUrl: s.localBaseUrl, model: s.localModel }, { onDelta })
-          : await streamChat({ ...base, apiKey: s.apiKey, model: s.model }, { onDelta });
+          : s.provider === "custom"
+            ? await streamCustomChat(
+                { ...base, baseUrl: s.customBaseUrl, apiKey: s.customApiKey || undefined, model: s.model },
+                { onDelta },
+              )
+            : s.provider === "anthropic"
+              ? await streamAnthropicChat(
+                  { apiKey: s.anthropicApiKey, model: s.model, system: s.systemPrompt, ...base },
+                  { onDelta },
+                )
+              : await streamChat(
+                  { ...base, apiKey: s.apiKey, model: s.model, verbosity: s.verbosity, reasoningEffort: s.reasoningEffort },
+                  { onDelta },
+                );
       return info;
     },
-    [s.provider, s.apiKey, s.model, s.localBaseUrl, s.localModel, s.temperature, s.maxTokens],
+    [s.provider, s.apiKey, s.model, s.localBaseUrl, s.localModel, s.customBaseUrl, s.customApiKey, s.anthropicApiKey, s.systemPrompt, s.verbosity, s.reasoningEffort, s.temperature, s.maxTokens],
   );
 
   const recordGeneration = useCallback(

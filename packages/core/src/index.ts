@@ -1,3 +1,4 @@
+export * from "./anthropic.js";
 export * from "./crypto.js";
 export * from "./diff.js";
 export * from "./errors.js";
