@@ -5,7 +5,7 @@
   "identifier": "ai.inkvault.app",
   "build": {
     "devUrl": "http://localhost:5173",
-    "frontendDist": "../web/dist"
+    "frontendDist": "../../web/dist"
   },
   "app": {
     "windows": [
@@ -17,11 +17,13 @@
         "minHeight": 600
       }
     ],
-    "securityCSP": null
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": []
+    "icon": ["icons/icon.ico"]
   }
 }

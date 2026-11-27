@@ -1,6 +1,6 @@
 import { createVault, emptyVaultData, openVault, type VaultData } from "@inkvault/core";
 import { writeToSavedHandle, pickVaultFile } from "./fileVault";
-import { isTauri, nativeLoadVault, nativeSaveVault, nativePickPath } from "./desktop";
+import { isTauri, nativeLoadVault, nativeSaveVault, nativePickPath, defaultVaultPath, vaultFileExists } from "./desktop";
 import { idbGet, idbSet } from "./idb";
 
 const VAULT_KEY = "vault-file";
@@ -29,6 +29,28 @@ export function clearSessionKeys(): void {
 
 export async function loadStoredVault(): Promise<StoredVault | undefined> {
   return idbGet<StoredVault>(VAULT_KEY);
+}
+
+/**
+ * Desktop first-run flow: if no IndexedDB copy exists, open the default vault from
+ * the OS app-data dir (created there on first save). Returns undefined on web or
+ * when there is no vault anywhere yet.
+ */
+export async function ensureDesktopVault(): Promise<StoredVault | undefined> {
+  if (!isTauri()) return undefined;
+  const existing = await idbGet<StoredVault>(VAULT_KEY);
+  if (existing) return existing;
+  const path = await defaultVaultPath();
+  if (!path || !(await vaultFileExists(path))) return undefined;
+  const bytes = await nativeLoadVault(path);
+  const stored: StoredVault = {
+    name: path.split(/[\\/]/).pop()?.replace(/\.vault$/i, "") || "inkvault",
+    bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    updatedAt: new Date().toISOString(),
+  };
+  await idbSet(VAULT_KEY, stored);
+  await setSavedPath(path);
+  return stored;
 }
 
 export async function getSavedPath(): Promise<string | undefined> {
@@ -85,6 +107,19 @@ export async function saveNewVault(name: string, passphrase: string, keyfile?: U
     updatedAt: new Date().toISOString(),
   };
   await idbSet(VAULT_KEY, stored);
+  if (isTauri()) {
+    // First run on desktop: default to the app-data dir so the vault survives even
+    // if the webview storage is cleared. Best-effort; IndexedDB copy stays authoritative.
+    try {
+      const path = (await getSavedPath()) ?? (await defaultVaultPath());
+      if (path) {
+        await nativeSaveVault(path, bytes);
+        await setSavedPath(path);
+      }
+    } catch {
+      // ignore — vault is still in IndexedDB; explicit "Save .vault file" works
+    }
+  }
   setSessionKeys(passphrase, keyfile);
   return data;
 }

@@ -22,9 +22,9 @@ export default function DataHelpSection() {
         {desktop ? (
           <p>
             <strong>Desktop app:</strong> the encrypted blob is a single <code>.vault</code> file on
-            your disk. The app also keeps a copy in its local storage so you can reopen it quickly;
-            use <em>Save .vault as…</em> to put the file wherever you like ( Documents, USB drive,
-            a synced folder) — that file is your backup.
+            your disk — by default in the app's data folder (created on your first vault). Use{" "}
+            <em>Save .vault file</em> to put a copy wherever you like (Documents, USB drive, a
+            synced folder) — that file is your backup.
           </p>
         ) : (
           <p>

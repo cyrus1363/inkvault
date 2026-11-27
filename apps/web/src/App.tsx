@@ -16,6 +16,7 @@ import {
 import {
   clearSessionKeys,
   encryptVaultData,
+  ensureDesktopVault,
   loadStoredVault,
   persistVaultData,
   saveVaultToNativePath,
@@ -66,8 +67,10 @@ export default function App() {
 
   useEffect(() => {
     loadStoredVault()
-      .then((v) => {
-        setStored(v);
+      .then(async (v) => {
+        // Desktop first run: fall back to the default vault in the OS app-data dir.
+        const s = v ?? (await ensureDesktopVault());
+        setStored(s);
         setScreen("auth");
       })
       .catch(() => setScreen("auth"));

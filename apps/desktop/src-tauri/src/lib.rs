@@ -26,6 +26,24 @@ fn pick_vault_path(save: bool) -> Result<Option<String>, String> {
     Ok(picked.map(|p| p.to_string_lossy().into_owned()))
 }
 
+/// Default vault location in the OS app-data dir (e.g. %APPDATA%/ai.inkvault.app on Windows).
+/// The directory is created if missing; the vault file itself is created on first save.
+#[tauri::command]
+fn default_vault_path(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir failed: {e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
+    Ok(dir.join("inkvault.vault").to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn vault_exists(path: String) -> bool {
+    Path::new(&path).is_file()
+}
+
 #[tauri::command]
 fn start_local_server(bin: String, model: String, port: u16, host: String) -> Result<(), String> {
     let mut guard = LOCAL_SERVER.lock().map_err(|e| e.to_string())?;
@@ -68,6 +86,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             vault_write,
             vault_read,
+            vault_exists,
+            default_vault_path,
             pick_vault_path,
             start_local_server,
             stop_local_server,
