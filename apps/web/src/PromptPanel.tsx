@@ -13,6 +13,7 @@ import {
   type VaultData,
 } from "@inkvault/core";
 import { useGenerate } from "./generate";
+import MergeModal from "./MergeModal";
 import Modal from "./Modal";
 
 interface Props {
@@ -105,6 +106,7 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
 
   const lastGeneration = data.generations[0];
   const [chainId, setChainId] = useState("");
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   return (
     <aside className="prompt-panel">
@@ -302,6 +304,11 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
           Clear takes
         </button>
         {gen.takes.length > 1 && <button onClick={gen.stopAll}>Stop all</button>}
+        {gen.takes.length > 1 && !gen.streaming && (
+          <button onClick={() => setMergeOpen(true)} title="Sentence-level merge of two takes">
+            Merge takes…
+          </button>
+        )}
       </div>
       {gen.error && <p className="error small">{gen.error}</p>}
       <pre className="output">{gen.output}{gen.streaming ? "▌" : ""}</pre>
@@ -317,6 +324,13 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
             </div>
           ))}
         </Modal>
+      )}
+      {mergeOpen && gen.takes.length > 1 && (
+        <MergeModal
+          takes={gen.takes.filter((t) => !t.streaming)}
+          onClose={() => setMergeOpen(false)}
+          onAppend={onAppend}
+        />
       )}
       {showLast && lastGeneration && (
         <Modal

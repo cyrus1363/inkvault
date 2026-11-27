@@ -7,3 +7,10 @@ export function replaceAll(content: string, find: string, replace: string): { co
   const parts = content.split(find);
   return { content: parts.join(replace), count: parts.length - 1 };
 }
+
+export function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
