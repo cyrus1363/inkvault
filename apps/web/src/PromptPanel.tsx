@@ -3,10 +3,12 @@ import {
   compilePrompt,
   estimateCostUsd,
   estimateTokens,
+  fetchLocalModels,
   fetchModels,
   flattenTree,
   type CompiledPrompt,
   type DocNode,
+  type ProviderKind,
   type VaultData,
 } from "@inkvault/core";
 import { useGenerate } from "./generate";
@@ -58,14 +60,21 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
     setModelsBusy(true);
     setModelError(undefined);
     try {
-      const models = await fetchModels(s.apiKey);
-      updateData((d) => ({ ...d, settings: { ...d.settings, models } }));
+      if (s.provider === "local") {
+        const localModels = await fetchLocalModels(s.localBaseUrl);
+        updateData((d) => ({ ...d, settings: { ...d.settings, localModels } }));
+      } else {
+        const models = await fetchModels(s.apiKey);
+        updateData((d) => ({ ...d, settings: { ...d.settings, models } }));
+      }
     } catch (e) {
       setModelError(e instanceof Error ? e.message : String(e));
     } finally {
       setModelsBusy(false);
     }
   }
+
+  const activeModelId = s.provider === "local" ? s.localModel : s.model;
 
   useEffect(() => {
     if (!pendingInstruction || pendingInstruction.nonce === lastNonceRef.current) return;
@@ -94,29 +103,80 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
   return (
     <aside className="prompt-panel">
       <div className="panel-row">
-        {s.models.length > 0 ? (
-          <select
-            value={s.model}
-            onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, model: e.target.value } }))}
-          >
-            <option value="">Select model…</option>
-            {s.models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.id})
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            placeholder="Model id, e.g. openai/gpt-4o"
-            value={s.model}
-            onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, model: e.target.value } }))}
-          />
-        )}
-        <button onClick={refreshModels} disabled={modelsBusy || !s.apiKey} title="Fetch model list + pricing from OpenRouter">
-          {modelsBusy ? "…" : "Models"}
-        </button>
+        <select
+          value={s.provider}
+          onChange={(e) =>
+            updateData((d) => ({ ...d, settings: { ...d.settings, provider: e.target.value as ProviderKind } }))
+          }
+        >
+          <option value="openrouter">OpenRouter (cloud, BYOK)</option>
+          <option value="local">Local (llama.cpp / Ollama)</option>
+        </select>
       </div>
+      {s.provider === "local" ? (
+        <>
+          <div className="panel-row">
+            {s.localModels.length > 0 ? (
+              <select
+                value={s.localModel}
+                onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, localModel: e.target.value } }))}
+              >
+                <option value="">Select local model…</option>
+                {s.localModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                placeholder="Local model id, e.g. qwen3-8b.gguf"
+                value={s.localModel}
+                onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, localModel: e.target.value } }))}
+              />
+            )}
+            <button onClick={refreshModels} disabled={modelsBusy} title="List models from the local server">
+              {modelsBusy ? "…" : "Refresh"}
+            </button>
+          </div>
+          <div className="panel-row">
+            <input
+              placeholder="http://127.0.0.1:8080"
+              value={s.localBaseUrl}
+              onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, localBaseUrl: e.target.value } }))}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="panel-row">
+          {s.models.length > 0 ? (
+            <select
+              value={s.model}
+              onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, model: e.target.value } }))}
+            >
+              <option value="">Select model…</option>
+              {s.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.id})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              placeholder="Model id, e.g. openai/gpt-4o"
+              value={s.model}
+              onChange={(e) => updateData((d) => ({ ...d, settings: { ...d.settings, model: e.target.value } }))}
+            />
+          )}
+          <button
+            onClick={refreshModels}
+            disabled={modelsBusy || !s.apiKey}
+            title="Fetch model list + pricing from OpenRouter"
+          >
+            {modelsBusy ? "…" : "Models"}
+          </button>
+        </div>
+      )}
       <div className="panel-row sliders">
         <label>
           Temp{" "}
@@ -164,7 +224,7 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend, pen
         {gen.streaming ? (
           <button onClick={gen.stop}>Stop</button>
         ) : (
-          <button onClick={() => void gen.generate(buildInput(instruction))} disabled={!instruction.trim() || !s.model}>
+          <button onClick={() => void gen.generate(buildInput(instruction))} disabled={!instruction.trim() || !activeModelId}>
             Generate
           </button>
         )}

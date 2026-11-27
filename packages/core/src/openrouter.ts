@@ -33,6 +33,13 @@ export interface ChatCompletionOptions {
   signal?: AbortSignal;
 }
 
+export interface StreamRequest {
+  url: string;
+  headers: Record<string, string>;
+  body: unknown;
+  signal?: AbortSignal;
+}
+
 export function friendlyMessage(status: number, message: string): string {
   const lower = message.toLowerCase();
   switch (status) {
@@ -69,50 +76,12 @@ async function toProviderError(res: Response): Promise<ProviderError> {
   return new ProviderError(res.status, friendlyMessage(res.status, message));
 }
 
-export async function fetchModels(apiKey: string, signal?: AbortSignal): Promise<CachedModel[]> {
-  const res = await fetch(`${OPENROUTER_BASE_URL}/models`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal,
-  });
-  if (!res.ok) throw await toProviderError(res);
-  const json = (await res.json()) as {
-    data?: Array<{
-      id: string;
-      name?: string;
-      context_length?: number;
-      pricing?: { prompt?: string; completion?: string };
-    }>;
-  };
-  return (json.data ?? []).map((m) => ({
-    id: m.id,
-    name: m.name ?? m.id,
-    contextWindow: m.context_length ?? 0,
-    pricing: {
-      prompt: Number.parseFloat(m.pricing?.prompt ?? "0") || 0,
-      completion: Number.parseFloat(m.pricing?.completion ?? "0") || 0,
-    },
-  }));
-}
-
-export async function streamChat(opts: ChatCompletionOptions, cb: StreamCallbacks = {}): Promise<CompletionInfo> {
-  if (!opts.apiKey) {
-    throw new ProviderError(0, "No API key configured. Add your OpenRouter key in Settings.");
-  }
-  if (!opts.model) {
-    throw new ProviderError(0, "No model selected. Pick a model in Settings.");
-  }
-  const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+export async function streamChatCompletion(req: StreamRequest, cb: StreamCallbacks = {}): Promise<CompletionInfo> {
+  const res = await fetch(req.url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: opts.model,
-      messages: opts.messages,
-      temperature: opts.temperature ?? 0.8,
-      max_tokens: opts.maxTokens ?? 4096,
-      stream: true,
-      stream_options: { include_usage: true },
-    }),
-    signal: opts.signal,
+    headers: req.headers,
+    body: JSON.stringify(req.body),
+    signal: req.signal,
   });
   if (!res.ok || !res.body) throw await toProviderError(res);
   const reader = res.body.getReader();
@@ -155,7 +124,58 @@ export async function streamChat(opts: ChatCompletionOptions, cb: StreamCallback
       }
     }
   }
-  return { content, model: opts.model, promptTokens, completionTokens, totalTokens };
+  return { content, model: "", promptTokens, completionTokens, totalTokens };
+}
+
+export async function fetchModels(apiKey: string, signal?: AbortSignal): Promise<CachedModel[]> {
+  const res = await fetch(`${OPENROUTER_BASE_URL}/models`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal,
+  });
+  if (!res.ok) throw await toProviderError(res);
+  const json = (await res.json()) as {
+    data?: Array<{
+      id: string;
+      name?: string;
+      context_length?: number;
+      pricing?: { prompt?: string; completion?: string };
+    }>;
+  };
+  return (json.data ?? []).map((m) => ({
+    id: m.id,
+    name: m.name ?? m.id,
+    contextWindow: m.context_length ?? 0,
+    pricing: {
+      prompt: Number.parseFloat(m.pricing?.prompt ?? "0") || 0,
+      completion: Number.parseFloat(m.pricing?.completion ?? "0") || 0,
+    },
+  }));
+}
+
+export async function streamChat(opts: ChatCompletionOptions, cb: StreamCallbacks = {}): Promise<CompletionInfo> {
+  if (!opts.apiKey) {
+    throw new ProviderError(0, "No API key configured. Add your OpenRouter key in Settings.");
+  }
+  if (!opts.model) {
+    throw new ProviderError(0, "No model selected. Pick a model in Settings.");
+  }
+  const info = await streamChatCompletion(
+    {
+      url: `${OPENROUTER_BASE_URL}/chat/completions`,
+      headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" },
+      body: {
+        model: opts.model,
+        messages: opts.messages,
+        temperature: opts.temperature ?? 0.8,
+        max_tokens: opts.maxTokens ?? 4096,
+        stream: true,
+        stream_options: { include_usage: true },
+      },
+      signal: opts.signal,
+    },
+    cb,
+  );
+  return { ...info, model: opts.model };
 }
 
 export function estimateCostUsd(

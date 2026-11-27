@@ -2,6 +2,11 @@ import { useState } from "react";
 import { peekVault, VaultError, type VaultData } from "@inkvault/core";
 import { importVaultFile, loadStoredVault, saveNewVault, unlockVault, type StoredVault } from "./vaultStore";
 import { supportsFileAccess } from "./fileVault";
+import { isTauri } from "./desktop";
+
+function canOpenFile(): boolean {
+  return supportsFileAccess() || isTauri();
+}
 
 export function AuthScreen({
   stored,
@@ -66,7 +71,7 @@ export function AuthScreen({
         busy={busy}
         error={error ?? fileError}
         canSwitchToUnlock={!!stored}
-        canOpenFile={supportsFileAccess()}
+        canOpenFile={canOpenFile()}
         onCreate={handleCreate}
         onSwitchToUnlock={() => setMode("unlock")}
         onOpenFile={handleOpenFile}
@@ -79,7 +84,7 @@ export function AuthScreen({
       error={error ?? fileError}
       needsKeyfile={needsKeyfile}
       canCreate={!stored}
-      canOpenFile={supportsFileAccess()}
+      canOpenFile={canOpenFile()}
       onUnlock={handleUnlock}
       onSwitchToCreate={() => setMode("create")}
       onOpenFile={handleOpenFile}

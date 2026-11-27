@@ -3,7 +3,9 @@ import {
   compilePrompt,
   estimateCostUsd,
   streamChat,
+  streamLocalChat,
   type CompiledPrompt,
+  type CompletionInfo,
   type DocNode,
   type VaultData,
 } from "@inkvault/core";
@@ -50,17 +52,17 @@ export function useGenerate(data: VaultData, updateData: (mutate: (d: VaultData)
       setStreaming(true);
       abortRef.current = new AbortController();
       try {
-        const info = await streamChat(
-          {
-            apiKey: s.apiKey,
-            model: s.model,
-            messages: compiled.messages,
-            temperature: s.temperature,
-            maxTokens: s.maxTokens,
-            signal: abortRef.current.signal,
-          },
-          { onDelta: (d) => setOutput((o) => o + d) },
-        );
+        const base = {
+          messages: compiled.messages,
+          temperature: s.temperature,
+          maxTokens: s.maxTokens,
+          signal: abortRef.current.signal,
+        };
+        const info: CompletionInfo =
+          s.provider === "local"
+            ? await streamLocalChat({ ...base, baseUrl: s.localBaseUrl, model: s.localModel }, { onDelta: (d) => setOutput((o) => o + d) })
+            : await streamChat({ ...base, apiKey: s.apiKey, model: s.model }, { onDelta: (d) => setOutput((o) => o + d) });
+        const modelId = s.provider === "local" ? s.localModel : s.model;
         const cost = pricing
           ? estimateCostUsd(pricing, info.promptTokens ?? compiled.estimatedPromptTokens, info.completionTokens ?? 0)
           : null;
@@ -70,7 +72,7 @@ export function useGenerate(data: VaultData, updateData: (mutate: (d: VaultData)
             {
               id: crypto.randomUUID(),
               at: new Date().toISOString(),
-              model: s.model,
+              model: modelId,
               instruction: input.selectionOverride
                 ? `[revise] ${input.selectionOverride.directions}`
                 : input.instruction,
@@ -93,7 +95,7 @@ export function useGenerate(data: VaultData, updateData: (mutate: (d: VaultData)
         setStreaming(false);
       }
     },
-    [s.apiKey, s.model, s.temperature, s.maxTokens, s.systemPrompt, pricing, updateData],
+    [s.provider, s.apiKey, s.model, s.localBaseUrl, s.localModel, s.temperature, s.maxTokens, s.systemPrompt, pricing, updateData],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);

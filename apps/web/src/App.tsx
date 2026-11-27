@@ -17,9 +17,11 @@ import {
   encryptVaultData,
   loadStoredVault,
   persistVaultData,
+  saveVaultToNativePath,
   type StoredVault,
 } from "./vaultStore";
 import { attachVaultFile, supportsFileAccess } from "./fileVault";
+import { isTauri } from "./desktop";
 import { download } from "./download";
 import { AuthScreen } from "./AuthScreens";
 import Binder from "./Binder";
@@ -104,8 +106,13 @@ export default function App() {
   async function handleSaveAsFile() {
     if (!stored || !data) return;
     try {
-      const bytes = await encryptVaultData(data);
-      await attachVaultFile(`${stored.name}.vault`, bytes);
+      if (isTauri()) {
+        const path = await saveVaultToNativePath(stored.name, data);
+        if (path) setSaveError(undefined);
+      } else {
+        const bytes = await encryptVaultData(data);
+        await attachVaultFile(`${stored.name}.vault`, bytes);
+      }
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Save to file failed");
     }
@@ -172,7 +179,7 @@ export default function App() {
           </div>
         </details>
         <button onClick={() => setFindReplaceOpen(true)}>Find &amp; replace</button>
-        {supportsFileAccess() && <button onClick={handleSaveAsFile}>Save .vault file</button>}
+        {(supportsFileAccess() || isTauri()) && <button onClick={handleSaveAsFile}>Save .vault file</button>}
         <label className="small">
           <input type="checkbox" checked={splitView} onChange={(e) => setSplitView(e.target.checked)} /> Split
           view

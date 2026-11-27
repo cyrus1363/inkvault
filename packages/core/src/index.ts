@@ -2,6 +2,7 @@ export * from "./crypto.js";
 export * from "./diff.js";
 export * from "./errors.js";
 export * from "./exporters.js";
+export * from "./local.js";
 export * from "./model.js";
 export * from "./openrouter.js";
 export * from "./prompt.js";

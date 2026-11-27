@@ -33,9 +33,15 @@ export interface CachedModel {
   pricing: { prompt: number; completion: number };
 }
 
+export type ProviderKind = "openrouter" | "local";
+
 export interface Settings {
+  provider: ProviderKind;
   apiKey: string;
   model: string;
+  localBaseUrl: string;
+  localModel: string;
+  localModels: string[];
   temperature: number;
   maxTokens: number;
   systemPrompt: string;
@@ -57,8 +63,12 @@ export interface GenerationRecord {
 
 export function defaultSettings(): Settings {
   return {
+    provider: "openrouter",
     apiKey: "",
     model: "",
+    localBaseUrl: "http://127.0.0.1:8080",
+    localModel: "",
+    localModels: [],
     temperature: 0.8,
     maxTokens: 4096,
     systemPrompt: "You are a precise fiction-writing assistant. Follow the instruction exactly.",

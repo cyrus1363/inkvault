@@ -1,8 +1,10 @@
 import { createVault, emptyVaultData, openVault, type VaultData } from "@inkvault/core";
 import { writeToSavedHandle, pickVaultFile } from "./fileVault";
+import { isTauri, nativeLoadVault, nativeSaveVault, nativePickPath } from "./desktop";
 import { idbGet, idbSet } from "./idb";
 
 const VAULT_KEY = "vault-file";
+const PATH_KEY = "vault-path";
 
 export interface StoredVault {
   name: string;
@@ -29,12 +31,42 @@ export async function loadStoredVault(): Promise<StoredVault | undefined> {
   return idbGet<StoredVault>(VAULT_KEY);
 }
 
+export async function getSavedPath(): Promise<string | undefined> {
+  return idbGet<string>(PATH_KEY);
+}
+
+export async function setSavedPath(path: string): Promise<void> {
+  await idbSet(PATH_KEY, path);
+}
+
 export async function importVaultFile(): Promise<StoredVault | null> {
-  const stored = await pickVaultFile();
+  let stored: StoredVault | null = null;
+  if (isTauri()) {
+    const path = await nativePickPath(false);
+    if (!path) return null;
+    const bytes = await nativeLoadVault(path);
+    stored = {
+      name: path.split(/[\\/]/).pop()?.replace(/\.vault$/i, "") ?? "vault",
+      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      updatedAt: new Date().toISOString(),
+    };
+    await setSavedPath(path);
+  } else {
+    stored = await pickVaultFile();
+  }
   if (stored) {
     await idbSet(VAULT_KEY, stored);
   }
   return stored;
+}
+
+export async function saveVaultToNativePath(name: string, data: VaultData): Promise<string | null> {
+  const bytes = await encryptVaultData(data);
+  const path = await nativePickPath(true);
+  if (!path) return null;
+  await nativeSaveVault(path, bytes);
+  await setSavedPath(path);
+  return path;
 }
 
 export async function encryptVaultData(data: VaultData): Promise<Uint8Array> {
@@ -72,5 +104,15 @@ export async function persistVaultData(stored: StoredVault, data: VaultData): Pr
   };
   await idbSet(VAULT_KEY, updated);
   await writeToSavedHandle(bytes);
+  if (isTauri()) {
+    const path = await getSavedPath();
+    if (path) {
+      try {
+        await nativeSaveVault(path, bytes);
+      } catch {
+        // native write is best-effort; IndexedDB copy is authoritative
+      }
+    }
+  }
   return updated;
 }
