@@ -1,74 +1,82 @@
-import { useEffect, useState } from "react";
-import { peekVault, VaultError, type VaultData } from "@inkvault/core";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  addDoc,
+  deleteDoc,
+  moveDoc,
+  updateDoc,
+  type DocKind,
+  type VaultData,
+} from "@inkvault/core";
 import {
   clearSessionKeys,
   loadStoredVault,
   persistVaultData,
-  saveNewVault,
-  unlockVault,
   type StoredVault,
 } from "./vaultStore";
+import { AuthScreen } from "./AuthScreens";
+import Binder from "./Binder";
+import Editor from "./Editor";
+import PromptPanel from "./PromptPanel";
+import SettingsModal from "./SettingsModal";
 
-type Screen = "loading" | "unlock" | "create" | "home";
+type Screen = "loading" | "auth" | "home";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("loading");
-  const [stored, setStored] = useState<StoredVault | undefined>(undefined);
-  const [data, setData] = useState<VaultData | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
+  const [stored, setStored] = useState<StoredVault>();
+  const [data, setData] = useState<VaultData>();
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
+  const [referenceDocId, setReferenceDocId] = useState<string | null>(null);
+  const [splitView, setSplitView] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
+
+  const dataRef = useRef<VaultData | undefined>(undefined);
+  const storedRef = useRef<StoredVault | undefined>(undefined);
+  const saveTimer = useRef<number | undefined>(undefined);
+  dataRef.current = data;
+  storedRef.current = stored;
 
   useEffect(() => {
     loadStoredVault()
       .then((v) => {
         setStored(v);
-        setScreen(v ? "unlock" : "create");
+        setScreen("auth");
       })
-      .catch(() => setScreen("create"));
+      .catch(() => setScreen("auth"));
   }, []);
 
-  async function handleUnlock(passphrase: string, keyfile?: Uint8Array) {
-    if (!stored) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      setData(await unlockVault(stored, passphrase, keyfile));
-      setScreen("home");
-    } catch (err) {
-      setError(err instanceof VaultError ? err.message : "Failed to open vault");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleCreate(name: string, passphrase: string, keyfile?: Uint8Array) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      setData(await saveNewVault(name, passphrase, keyfile));
-      setStored(await loadStoredVault());
-      setScreen("home");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create vault");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleAutosave(next: VaultData) {
-    if (!stored) return;
+  const updateData = useCallback((mutate: (d: VaultData) => VaultData) => {
+    const prev = dataRef.current;
+    if (!prev) return;
+    const next: VaultData = { ...mutate(prev), updatedAt: new Date().toISOString() };
+    dataRef.current = next;
     setData(next);
-    try {
-      setStored(await persistVaultData(stored, next));
-    } catch {
-      setError("Autosave failed — vault is locked or storage is unavailable");
-    }
+    setSaveError(undefined);
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      const s = storedRef.current;
+      if (!s) return;
+      persistVaultData(s, next)
+        .then((ns) => {
+          storedRef.current = ns;
+          setStored(ns);
+        })
+        .catch(() => setSaveError("Autosave failed — vault locked or storage unavailable"));
+    }, 800);
+  }, []);
+
+  function handleUnlocked(d: VaultData, s: StoredVault) {
+    setData(d);
+    setStored(s);
+    setScreen("home");
   }
 
   function handleLock() {
+    window.clearTimeout(saveTimer.current);
     clearSessionKeys();
     setData(undefined);
-    setScreen("unlock");
+    setScreen("auth");
   }
 
   if (screen === "loading") {
@@ -78,157 +86,95 @@ export default function App() {
       </main>
     );
   }
-
-  if (screen === "home" && data && stored) {
-    return (
-      <main className="screen">
-        <h1>{stored.name}</h1>
-        <p className="muted">
-          Vault unlocked · schema v{data.schema} · updated {data.updatedAt}
-        </p>
-        <p>Editor and binder land in the next phase.</p>
-        <button onClick={handleLock}>Lock vault</button>
-      </main>
-    );
+  if (screen === "auth" || !data || !stored) {
+    return <AuthScreen stored={stored} onUnlocked={handleUnlocked} />;
   }
 
-  if (screen === "create") {
-    return (
-      <CreateForm
-        busy={busy}
-        error={error}
-        canSwitchToUnlock={!!stored}
-        onCreate={handleCreate}
-        onSwitchToUnlock={() => setScreen("unlock")}
-      />
-    );
-  }
+  const activeDoc = data.documents.find((d) => d.id === activeDocId && d.kind === "document") ?? null;
+  const referenceDoc =
+    data.documents.find((d) => d.id === referenceDocId && d.kind === "document") ?? null;
 
-  const needsKeyfile = stored ? peekVault(new Uint8Array(stored.bytes)).hasKeyfile : false;
-  return <UnlockForm busy={busy} error={error} needsKeyfile={needsKeyfile} onUnlock={handleUnlock} />;
-}
-
-function KeyfileInput({ onKeyfile }: { onKeyfile: (keyfile: Uint8Array | undefined) => void }) {
-  return (
-    <label>
-      Keyfile (optional)
-      <input
-        type="file"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (!file) {
-            onKeyfile(undefined);
-            return;
-          }
-          file.arrayBuffer().then((buf) => onKeyfile(new Uint8Array(buf)));
-        }}
-      />
-    </label>
-  );
-}
-
-function UnlockForm({
-  busy,
-  error,
-  needsKeyfile,
-  onUnlock,
-}: {
-  busy: boolean;
-  error?: string;
-  needsKeyfile: boolean;
-  onUnlock: (passphrase: string, keyfile?: Uint8Array) => void;
-}) {
-  const [passphrase, setPassphrase] = useState("");
-  const [keyfile, setKeyfile] = useState<Uint8Array | undefined>(undefined);
+  const handleAdd = (kind: DocKind, parentId: string | null) => {
+    const { docs, doc } = addDoc(data.documents, {
+      title: kind === "folder" ? "New folder" : "New document",
+      kind,
+      parentId,
+    });
+    updateData((d) => ({ ...d, documents: docs }));
+    if (kind === "document") setActiveDocId(doc.id);
+  };
 
   return (
-    <main className="screen">
-      <h1>Unlock vault</h1>
-      {needsKeyfile && <p className="muted">This vault requires a keyfile.</p>}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onUnlock(passphrase, keyfile);
-        }}
-      >
-        <label>
-          Passphrase
+    <div className="app">
+      <header className="topbar">
+        <strong>{stored.name}</strong>
+        <span className="muted small">{saveError ?? "autosaves locally, encrypted"}</span>
+        <span className="spacer" />
+        <label className="small">
           <input
-            type="password"
-            autoFocus
-            value={passphrase}
-            onChange={(e) => setPassphrase(e.target.value)}
-          />
+            type="checkbox"
+            checked={splitView}
+            onChange={(e) => setSplitView(e.target.checked)}
+          />{" "}
+          Split view
         </label>
-        <KeyfileInput onKeyfile={setKeyfile} />
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={busy || !passphrase}>
-          {busy ? "Unlocking…" : "Unlock"}
-        </button>
-      </form>
-    </main>
-  );
-}
-
-function CreateForm({
-  busy,
-  error,
-  canSwitchToUnlock,
-  onCreate,
-  onSwitchToUnlock,
-}: {
-  busy: boolean;
-  error?: string;
-  canSwitchToUnlock: boolean;
-  onCreate: (name: string, passphrase: string, keyfile?: Uint8Array) => void;
-  onSwitchToUnlock: () => void;
-}) {
-  const [name, setName] = useState("My Novel");
-  const [passphrase, setPassphrase] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [keyfile, setKeyfile] = useState<Uint8Array | undefined>(undefined);
-  const [localError, setLocalError] = useState<string | undefined>(undefined);
-
-  return (
-    <main className="screen">
-      <h1>Create a vault</h1>
-      <p className="muted">
-        Everything is encrypted on this device before it is stored. The server never sees your work.
-      </p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (passphrase !== confirm) {
-            setLocalError("Passphrases do not match");
-            return;
+        <button onClick={() => setSettingsOpen(true)}>Settings</button>
+        <button onClick={handleLock}>Lock</button>
+      </header>
+      <div className="main">
+        <Binder
+          docs={data.documents}
+          activeDocId={activeDocId}
+          onSelect={setActiveDocId}
+          onAdd={handleAdd}
+          onRename={(id, title) => updateData((d) => ({ ...d, documents: updateDoc(d.documents, id, { title }) }))}
+          onDelete={(id) => {
+            updateData((d) => ({ ...d, documents: deleteDoc(d.documents, id) }));
+            if (activeDocId === id) setActiveDocId(null);
+            if (referenceDocId === id) setReferenceDocId(null);
+          }}
+          onToggleContext={(id, enabled) =>
+            updateData((d) => ({ ...d, documents: updateDoc(d.documents, id, { contextEnabled: enabled }) }))
           }
-          setLocalError(undefined);
-          onCreate(name, passphrase, keyfile);
-        }}
-      >
-        <label>
-          Vault name
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label>
-          Passphrase
-          <input type="password" autoFocus value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
-        </label>
-        <label>
-          Confirm passphrase
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        </label>
-        <KeyfileInput onKeyfile={setKeyfile} />
-        {(localError || error) && <p className="error">{localError ?? error}</p>}
-        <button type="submit" disabled={busy || !passphrase || !name}>
-          {busy ? "Encrypting…" : "Create vault"}
-        </button>
-        {canSwitchToUnlock && (
-          <button type="button" onClick={onSwitchToUnlock}>
-            Open existing vault instead
-          </button>
-        )}
-      </form>
-    </main>
+          onMove={(id, parentId, index) =>
+            updateData((d) => ({ ...d, documents: moveDoc(d.documents, id, parentId, index) }))
+          }
+        />
+        <div className="editor-area">
+          <Editor
+            doc={activeDoc}
+            onChange={(content) =>
+              activeDoc && updateData((d) => ({ ...d, documents: updateDoc(d.documents, activeDoc.id, { content }) }))
+            }
+            onRename={(title) =>
+              activeDoc && updateData((d) => ({ ...d, documents: updateDoc(d.documents, activeDoc.id, { title }) }))
+            }
+          />
+          {splitView && (
+            <Editor doc={referenceDoc} docs={data.documents} readOnly onSelectDoc={setReferenceDocId} />
+          )}
+        </div>
+        <PromptPanel
+          data={data}
+          activeDoc={activeDoc}
+          updateData={updateData}
+          onAppend={(text) => {
+            if (!activeDoc) return;
+            const sep = activeDoc.content && !activeDoc.content.endsWith("\n") ? "\n\n" : "";
+            updateData((d) => ({
+              ...d,
+              documents: updateDoc(d.documents, activeDoc.id, { content: activeDoc.content + sep + text }),
+            }));
+          }}
+        />
+      </div>
+      {settingsOpen && (
+        <SettingsModal
+          settings={data.settings}
+          onClose={() => setSettingsOpen(false)}
+          onSave={(patch) => updateData((d) => ({ ...d, settings: { ...d.settings, ...patch } }))}
+        />
+      )}
+    </div>
   );
 }
