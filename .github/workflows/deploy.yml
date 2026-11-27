@@ -23,7 +23,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build -w @inkvault/web
+      - run: npm run build
       - name: Bundle hashes
         run: |
           cd apps/web/dist

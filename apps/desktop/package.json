@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "npm run build -w @inkvault/web",
+    "build": "npm run build -w @inkvault/core && npm run build -w @inkvault/web",
     "build:app": "npm run build -w @inkvault/web && tauri build",
     "tauri": "tauri"
   },
