@@ -1,0 +1,55 @@
+name: deploy-web
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @inkvault/web
+      - name: Bundle hashes
+        run: |
+          cd apps/web/dist
+          find . -type f | sort | xargs sha256sum > /tmp/bundle-sha256.txt
+          cat /tmp/bundle-sha256.txt
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+      - name: Release with bundle hashes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="web-$(git rev-parse --short HEAD)"
+          gh release create "$TAG" --title "inkvault web $TAG" \
+            --notes "Deployed bundle SHA-256 (apps/web/dist) — verify what you run:
+
+          \`\`\`
+          $(cat /tmp/bundle-sha256.txt)
+          \`\`\`" \
+            --repo "$GITHUB_REPOSITORY" || gh release edit "$TAG" --notes "updated" --repo "$GITHUB_REPOSITORY"
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

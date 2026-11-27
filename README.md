@@ -65,3 +65,12 @@ npm install
 npm test     # runs workspace tests
 npm run build
 ```
+
+## Deployment
+
+Static hosting only — the server never sees content. `.github/workflows/deploy.yml`
+publishes `apps/web/dist` to **GitHub Pages** on every merge to `main` and creates a
+`web-<sha>` release containing the SHA-256 of every bundle file, so users can verify
+the code they run. Enable once in repo Settings → Pages → Source: GitHub Actions.
+The bundle is built with `base: "./"`, so it works on both a custom domain and
+`https://<user>.github.io/inkvault/`.
