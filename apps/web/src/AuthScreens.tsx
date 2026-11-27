@@ -1,15 +1,33 @@
 import { useState } from "react";
 import { peekVault, VaultError, type VaultData } from "@inkvault/core";
-import { loadStoredVault, saveNewVault, unlockVault, type StoredVault } from "./vaultStore";
+import { importVaultFile, loadStoredVault, saveNewVault, unlockVault, type StoredVault } from "./vaultStore";
+import { supportsFileAccess } from "./fileVault";
 
 export function AuthScreen({
   stored,
   onUnlocked,
+  onStoredChanged,
 }: {
   stored?: StoredVault;
   onUnlocked: (data: VaultData, stored: StoredVault) => void;
+  onStoredChanged: (s: StoredVault | undefined) => void;
 }) {
   const [mode, setMode] = useState<"unlock" | "create">(stored ? "unlock" : "create");
+  const [fileError, setFileError] = useState<string>();
+
+  async function handleOpenFile() {
+    setFileError(undefined);
+    try {
+      const s = await importVaultFile();
+      if (s) {
+        onStoredChanged(s);
+        setMode("unlock");
+      }
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "Could not open file");
+    }
+  }
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -46,21 +64,25 @@ export function AuthScreen({
     return (
       <CreateForm
         busy={busy}
-        error={error}
+        error={error ?? fileError}
         canSwitchToUnlock={!!stored}
+        canOpenFile={supportsFileAccess()}
         onCreate={handleCreate}
         onSwitchToUnlock={() => setMode("unlock")}
+        onOpenFile={handleOpenFile}
       />
     );
   }
   return (
     <UnlockForm
       busy={busy}
-      error={error}
+      error={error ?? fileError}
       needsKeyfile={needsKeyfile}
       canCreate={!stored}
+      canOpenFile={supportsFileAccess()}
       onUnlock={handleUnlock}
       onSwitchToCreate={() => setMode("create")}
+      onOpenFile={handleOpenFile}
     />
   );
 }
@@ -89,15 +111,19 @@ function UnlockForm({
   error,
   needsKeyfile,
   canCreate,
+  canOpenFile,
   onUnlock,
   onSwitchToCreate,
+  onOpenFile,
 }: {
   busy: boolean;
   error?: string;
   needsKeyfile: boolean;
   canCreate: boolean;
+  canOpenFile: boolean;
   onUnlock: (passphrase: string, keyfile?: Uint8Array) => void;
   onSwitchToCreate: () => void;
+  onOpenFile: () => void;
 }) {
   const [passphrase, setPassphrase] = useState("");
   const [keyfile, setKeyfile] = useState<Uint8Array | undefined>(undefined);
@@ -131,6 +157,11 @@ function UnlockForm({
             Create a new vault instead
           </button>
         )}
+        {canOpenFile && (
+          <button type="button" onClick={onOpenFile}>
+            Open .vault file from disk…
+          </button>
+        )}
       </form>
     </main>
   );
@@ -140,14 +171,18 @@ function CreateForm({
   busy,
   error,
   canSwitchToUnlock,
+  canOpenFile,
   onCreate,
   onSwitchToUnlock,
+  onOpenFile,
 }: {
   busy: boolean;
   error?: string;
   canSwitchToUnlock: boolean;
+  canOpenFile: boolean;
   onCreate: (name: string, passphrase: string, keyfile?: Uint8Array) => void;
   onSwitchToUnlock: () => void;
+  onOpenFile: () => void;
 }) {
   const [name, setName] = useState("My Novel");
   const [passphrase, setPassphrase] = useState("");
@@ -192,6 +227,11 @@ function CreateForm({
         {canSwitchToUnlock && (
           <button type="button" onClick={onSwitchToUnlock}>
             Open existing vault instead
+          </button>
+        )}
+        {canOpenFile && (
+          <button type="button" onClick={onOpenFile}>
+            Open .vault file from disk…
           </button>
         )}
       </form>

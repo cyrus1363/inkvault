@@ -37,10 +37,15 @@ are pinned in the versioned header so the format can be upgraded later.
 ## Phase status
 
 - **Phase 0 (done):** monorepo scaffold + vault crypto core with tests.
-- **Phase 1 (in progress):** web MVP — vault unlock, binder (stable-ID tree,
+- **Phase 1 (done):** web MVP — vault unlock, binder (stable-ID tree,
   drag-and-drop, context toggles), editor with encrypted autosave, split view,
   prompt compiler with Preview/Last Prompt, streaming OpenRouter chat with
   live token/cost estimate, Stop, and mapped provider errors.
+- **Phase 2 (in progress):** inline `\` continue + `[bracket]` revise with
+  accept/reject diff hunks, version snapshots (cap 50, restore/compare),
+  find & replace (doc or whole project), hotkey prompt library (Ctrl/Cmd+1–0),
+  exports (.md/.txt/.docx/ZIP via a dependency-free ZIP writer), File System
+  Access API save-to-`.vault`, PWA offline (service worker + manifest).
 
 ## Commands
 

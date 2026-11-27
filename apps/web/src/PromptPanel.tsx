@@ -1,15 +1,15 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   compilePrompt,
   estimateCostUsd,
   estimateTokens,
   fetchModels,
   flattenTree,
-  streamChat,
   type CompiledPrompt,
   type DocNode,
   type VaultData,
 } from "@inkvault/core";
+import { useGenerate } from "./generate";
 import Modal from "./Modal";
 
 interface Props {
@@ -17,18 +17,19 @@ interface Props {
   activeDoc: DocNode | null;
   updateData: (mutate: (d: VaultData) => VaultData) => void;
   onAppend: (text: string) => void;
+  pendingInstruction: { text: string; nonce: number } | null;
 }
 
-export default function PromptPanel({ data, activeDoc, updateData, onAppend }: Props) {
+export default function PromptPanel({ data, activeDoc, updateData, onAppend, pendingInstruction }: Props) {
   const s = data.settings;
   const [instruction, setInstruction] = useState("");
-  const [output, setOutput] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState<string>();
   const [preview, setPreview] = useState<CompiledPrompt | null>(null);
   const [showLast, setShowLast] = useState(false);
   const [modelsBusy, setModelsBusy] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const [modelError, setModelError] = useState<string>();
+  const lastNonceRef = useRef(0);
+
+  const gen = useGenerate(data, updateData);
 
   const contextDocs = useMemo(
     () =>
@@ -41,74 +42,52 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend }: P
     () => contextDocs.reduce((n, d) => n + estimateTokens(d.content), 0),
     [contextDocs],
   );
-  const buildPrompt = () =>
-    compilePrompt({ systemPrompt: s.systemPrompt, instruction, contextDocs, activeDoc });
-  const promptEst = useMemo(() => {
-    const p = compilePrompt({ systemPrompt: s.systemPrompt, instruction, contextDocs, activeDoc });
-    return p.estimatedPromptTokens;
-  }, [s.systemPrompt, instruction, contextDocs, activeDoc]);
-  const pricing = s.models.find((m) => m.id === s.model)?.pricing;
-  const maxCostUsd = pricing ? estimateCostUsd(pricing, promptEst, s.maxTokens) : null;
+  const promptEst = useMemo(
+    () =>
+      contextTokens +
+      estimateTokens(instruction) +
+      estimateTokens(s.systemPrompt) +
+      (activeDoc ? estimateTokens(activeDoc.content) : 0),
+    [contextTokens, instruction, s.systemPrompt, activeDoc],
+  );
+  const maxCostUsd = gen.pricing ? estimateCostUsd(gen.pricing, promptEst, s.maxTokens) : null;
+
+  const buildInput = (text: string) => ({ instruction: text, contextDocs, activeDoc });
 
   async function refreshModels() {
     setModelsBusy(true);
-    setError(undefined);
+    setModelError(undefined);
     try {
       const models = await fetchModels(s.apiKey);
       updateData((d) => ({ ...d, settings: { ...d.settings, models } }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setModelError(e instanceof Error ? e.message : String(e));
     } finally {
       setModelsBusy(false);
     }
   }
 
-  async function generate() {
-    const compiled = buildPrompt();
-    setError(undefined);
-    setOutput("");
-    setStreaming(true);
-    abortRef.current = new AbortController();
-    try {
-      const info = await streamChat(
-        {
-          apiKey: s.apiKey,
-          model: s.model,
-          messages: compiled.messages,
-          temperature: s.temperature,
-          maxTokens: s.maxTokens,
-          signal: abortRef.current.signal,
-        },
-        { onDelta: (d) => setOutput((o) => o + d) },
-      );
-      const cost = pricing
-        ? estimateCostUsd(pricing, info.promptTokens ?? compiled.estimatedPromptTokens, info.completionTokens ?? 0)
-        : null;
-      updateData((d) => ({
-        ...d,
-        generations: [
-          {
-            id: crypto.randomUUID(),
-            at: new Date().toISOString(),
-            model: s.model,
-            instruction,
-            promptPreview: compiled.messages.map((m) => `[${m.role}]\n${m.content}`).join("\n\n"),
-            output: info.content,
-            promptTokens: info.promptTokens,
-            completionTokens: info.completionTokens,
-            costUsd: cost,
-          },
-          ...d.generations,
-        ].slice(0, 50),
-      }));
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    } finally {
-      setStreaming(false);
-    }
-  }
+  useEffect(() => {
+    if (!pendingInstruction || pendingInstruction.nonce === lastNonceRef.current) return;
+    lastNonceRef.current = pendingInstruction.nonce;
+    setInstruction(pendingInstruction.text);
+    void gen.generate(buildInput(pendingInstruction.text));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInstruction]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !/^[0-9]$/.test(e.key)) return;
+      const entry = s.promptLibrary.find((p) => p.slot === e.key);
+      if (!entry?.instruction) return;
+      e.preventDefault();
+      setInstruction(entry.instruction);
+      void gen.generate(buildInput(entry.instruction));
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.promptLibrary, contextDocs, activeDoc, gen.generate]);
 
   const lastGeneration = data.generations[0];
 
@@ -164,7 +143,7 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend }: P
         </label>
       </div>
       <textarea
-        placeholder="Instruction, e.g. Continue the scene…"
+        placeholder="Instruction, e.g. Continue the scene… (Ctrl/Cmd+1–0 run saved prompts)"
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
         rows={3}
@@ -174,26 +153,31 @@ export default function PromptPanel({ data, activeDoc, updateData, onAppend }: P
         {maxCostUsd !== null ? ` · up to $${maxCostUsd.toFixed(4)}` : ""}
       </div>
       <div className="panel-row buttons">
-        <button onClick={() => setPreview(buildPrompt())}>Preview prompt</button>
+        <button
+          onClick={() => setPreview(compilePrompt({ systemPrompt: s.systemPrompt, instruction, contextDocs, activeDoc }))}
+        >
+          Preview prompt
+        </button>
         <button onClick={() => setShowLast(true)} disabled={!lastGeneration}>
           Last prompt
         </button>
-        {streaming ? (
-          <button onClick={() => abortRef.current?.abort()}>Stop</button>
+        {gen.streaming ? (
+          <button onClick={gen.stop}>Stop</button>
         ) : (
-          <button onClick={generate} disabled={!instruction.trim() || !s.model}>
+          <button onClick={() => void gen.generate(buildInput(instruction))} disabled={!instruction.trim() || !s.model}>
             Generate
           </button>
         )}
-        <button onClick={() => onAppend(output)} disabled={!output || !activeDoc}>
+        <button onClick={() => onAppend(gen.output)} disabled={!gen.output || !activeDoc}>
           Append to doc
         </button>
-        <button onClick={() => setOutput("")} disabled={!output}>
+        <button onClick={gen.clear} disabled={!gen.output}>
           Clear
         </button>
       </div>
-      {error && <p className="error small">{error}</p>}
-      <pre className="output">{output}{streaming ? "▌" : ""}</pre>
+      {gen.error && <p className="error small">{gen.error}</p>}
+      {modelError && <p className="error small">{modelError}</p>}
+      <pre className="output">{gen.output}{gen.streaming ? "▌" : ""}</pre>
       {preview && (
         <Modal title="Prompt preview" onClose={() => setPreview(null)}>
           <div className="muted small">

@@ -1,5 +1,12 @@
 export type DocKind = "folder" | "document";
 
+export interface Snapshot {
+  id: string;
+  at: string;
+  label: string;
+  content: string;
+}
+
 export interface DocNode {
   id: string;
   title: string;
@@ -10,6 +17,13 @@ export interface DocNode {
   contextEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+  snapshots?: Snapshot[];
+}
+
+export interface PromptEntry {
+  slot: string;
+  label: string;
+  instruction: string;
 }
 
 export interface CachedModel {
@@ -26,6 +40,7 @@ export interface Settings {
   maxTokens: number;
   systemPrompt: string;
   models: CachedModel[];
+  promptLibrary: PromptEntry[];
 }
 
 export interface GenerationRecord {
@@ -48,6 +63,7 @@ export function defaultSettings(): Settings {
     maxTokens: 4096,
     systemPrompt: "You are a precise fiction-writing assistant. Follow the instruction exactly.",
     models: [],
+    promptLibrary: [],
   };
 }
 
