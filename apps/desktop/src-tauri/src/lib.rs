@@ -26,7 +26,7 @@ fn pick_vault_path(save: bool) -> Result<Option<String>, String> {
     Ok(picked.map(|p| p.to_string_lossy().into_owned()))
 }
 
-/// Default vault location in the OS app-data dir (e.g. %APPDATA%/ai.inkvault.app on Windows).
+/// Default vault location in the OS app-data dir (e.g. %APPDATA%/ai.inkvault.desktop on Windows).
 /// The directory is created if missing; the vault file itself is created on first save.
 #[tauri::command]
 fn default_vault_path(app: tauri::AppHandle) -> Result<String, String> {
@@ -96,7 +96,7 @@ struct DownloadProgress {
 static DOWNLOADS: Mutex<Option<std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>>
     = Mutex::new(None);
 
-/// Default models dir in the OS app-data dir (e.g. %APPDATA%/ai.inkvault.app/models).
+/// Default models dir in the OS app-data dir (e.g. %APPDATA%/ai.inkvault.desktop/models).
 #[tauri::command]
 fn default_models_dir(app: tauri::AppHandle) -> Result<String, String> {
     use tauri::Manager;
