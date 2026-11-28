@@ -4,6 +4,7 @@ import { download } from "./download";
 import { importVaultFile, loadStoredVault, saveNewVault, unlockVault, type StoredVault } from "./vaultStore";
 import { supportsFileAccess } from "./fileVault";
 import { isTauri } from "./desktop";
+import DataHelpSection from "./DataHelp";
 import { OwlMascot } from "./mascots";
 
 function canOpenFile(): boolean {
@@ -206,6 +207,7 @@ function UnlockForm({
           </button>
         )}
       </form>
+      <DataHelpSection />
     </main>
   );
 }
@@ -279,6 +281,7 @@ function CreateForm({
           </button>
         )}
       </form>
+      <DataHelpSection />
     </main>
   );
 }
